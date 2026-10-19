@@ -250,7 +250,6 @@ class CameraState:
     def move_then_capture(self, direction: str):
         """Use a temporary P4P session, then a NEW session to ensure post-PTZ frame."""
         try:
-            quality, index = video_profile(self.options)
             uid, password = self.resolve_camera()
             env = os.environ.copy()
             env.update({
@@ -258,7 +257,9 @@ class CameraState:
                 "UBOX_PASSWORD": password,
                 "UBOX_PTZ_DIRECTION": direction,
                 "UBOX_PTZ_MS": "420",
-                "UBOX_STREAM_INDEX": str(index),
+                # PTZ does not require HD: use the proven SD P4P profile
+                # for short motor commands. Fresh capture still requests HD.
+                "UBOX_STREAM_INDEX": "0",
             })
             process = subprocess.run(
                 [NODE_EXECUTABLE, "/app/ptz_move.js"],

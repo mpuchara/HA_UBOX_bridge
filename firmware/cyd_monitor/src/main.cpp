@@ -381,6 +381,11 @@ void pollImage() {
   http.end();
 }
 
+void ptzBanner(const String& message,uint16_t color){
+  tft.fillRect(0,0,tft.width(),25,TFT_BLACK);
+  tft.setTextColor(color,TFT_BLACK);
+  tft.drawString(message,8,4,2);
+}
 bool sendPtz(const char* direction){
   if(WiFi.status()!=WL_CONNECTED||haHost.isEmpty()||snapshotToken.isEmpty())return false;
   WiFiClient client;
@@ -393,10 +398,10 @@ bool sendPtz(const char* direction){
   const int response=http.POST(json);http.end();
   if(response!=202){
     Serial.printf("PTZ rejected HTTP %d\n",response);
-    showMessage(response==409?"PTZ zajety":"Blad PTZ",TFT_YELLOW);
+    ptzBanner(response==409?"PTZ zajety":"Blad PTZ",TFT_YELLOW);
     return false;
   }
-  showMessage("Ruch "+String(direction)+"...",TFT_CYAN);
+  ptzBanner("Ruch: "+String(direction)+"...",TFT_CYAN);
   waitingForPtzImage=true;
   ptzImageDeadline=millis()+PTZ_REFRESH_TIMEOUT_MS;
   lastPoll=0;
@@ -485,7 +490,7 @@ void loop() {
   checkTouch();
   if(waitingForPtzImage&&static_cast<int32_t>(millis()-ptzImageDeadline)>=0){
     waitingForPtzImage=false;
-    showMessage("PTZ: brak nowego zdjecia",TFT_YELLOW);
+    ptzBanner("PTZ: brak nowego zdjecia",TFT_YELLOW);
   }
   const unsigned long interval=waitingForPtzImage?PTZ_POLL_MS:REFRESH_MS;
   if (lastPoll == 0 || millis() - lastPoll >= interval) {
