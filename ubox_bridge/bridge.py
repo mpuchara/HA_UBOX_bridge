@@ -41,6 +41,7 @@ class CameraState:
         DATA.mkdir(parents=True, exist_ok=True)
         self.image = DATA / "last.jpg"
         self.cyd_image = DATA / "last_cyd.jpg"
+        self.cyd_wide_image = DATA / "last_cyd_wide.jpg"
         self.lock = threading.Lock()
         self.busy = False
         self.detecting = False
@@ -186,6 +187,7 @@ class CameraState:
                 "source_resolution": self.source_resolution,
                 "has_image": self.image.is_file() and self.image.stat().st_size > 0,
                 "has_cyd_image": self.cyd_image.is_file() and self.cyd_image.stat().st_size > 0,
+                "has_cyd_wide_image": self.cyd_wide_image.is_file() and self.cyd_wide_image.stat().st_size > 0,
                 "interval_minutes": int(self.options.get("interval_minutes", 0)),
             }
 
@@ -330,16 +332,23 @@ class CameraState:
                 # Lanczos downsamples directly from the HD master.
                 # Cover + crop preserves geometry while filling a 240x320 LCD.
                 portrait = Path(folder) / "frame_cyd.jpg"
-                resized = subprocess.run(
-                    [FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
-                     "-i", str(jpeg),
-                     "-vf", "scale=320:240:force_original_aspect_ratio=increase:flags=lanczos,"
-                            "crop=320:240,transpose=2",
-                     "-frames:v", "1", "-pix_fmt", "yuvj420p", "-q:v", "2", str(portrait)],
-                    capture_output=True, timeout=30, check=False,
-                )
-                if resized.returncode or not portrait.is_file() or not portrait.stat().st_size:
-                    raise RuntimeError("Nie udało się przeskalować natywnej klatki do 240x320.")
+                landscape = Path(folder) / "frame_cyd_wide.jpg"
+                # Both low-bandwidth JPGs come from the ORIGINAL source frame.
+                # CYD firmware selects landscape in rotations 1/3.
+                for target, rotate in ((portrait, True), (landscape, False)):
+                    vf = ("scale=320:240:force_original_aspect_ratio=increase:flags=lanczos,"
+                          "crop=320:240")
+                    if rotate:
+                        vf += ",transpose=2"
+                    resized = subprocess.run(
+                        [FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
+                         "-i", str(jpeg), "-vf", vf,
+                         "-frames:v", "1", "-pix_fmt", "yuvj420p",
+                         "-q:v", "2", str(target)],
+                        capture_output=True, timeout=30, check=False,
+                    )
+                    if resized.returncode or not target.is_file() or not target.stat().st_size:
+                        raise RuntimeError("Nie udało się przygotować JPEG dla CYD.")
                 metrics["native_resolution"] = source_resolution
                 with self.lock:
                     if self.live_diagnostics is not None:
@@ -350,6 +359,7 @@ class CameraState:
                          metrics["green_fraction"], metrics["noise_fraction"])
                 # Only publish fully rendered outputs; keep old images if a step fails.
                 os.replace(portrait, self.cyd_image)
+                os.replace(landscape, self.cyd_wide_image)
                 os.replace(jpeg, self.image)
             self.publish_metadata("live_alt", source_resolution=source_resolution)
             LOG.info("Live snapshot stored in original stream resolution (%s; %d B)",
@@ -374,7 +384,7 @@ STATE: CameraState | None = None
 
 
 class ApiHandler(BaseHTTPRequestHandler):
-    server_version = "UBoxBridge/0.5.4"
+    server_version = "UBoxBridge/0.5.5"
 
     def log_message(self, fmt, *args):
         # Never log URLs or query strings containing the snapshot token.
@@ -418,25 +428,26 @@ class ApiHandler(BaseHTTPRequestHandler):
                 self.respond(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
             elif route == "/status":
                 self.json_response(200, {**STATE.status(), "snapshot_token": STATE.token})
-            elif route in ("/snapshot.jpg", "/snapshot-cyd.jpg"):
-                self.snapshot(portrait=route == "/snapshot-cyd.jpg")
+            elif route in ("/snapshot.jpg", "/snapshot-cyd.jpg", "/snapshot-cyd-wide.jpg"):
+                self.snapshot(variant=route)
             else:
                 self.respond(404, b"Not found", "text/plain")
             return
         if route == "/health":
             self.json_response(200, {"ok": True})
-        elif route in ("/snapshot.jpg", "/snapshot-cyd.jpg", "/snapshot-meta.json"):
+        elif route in ("/snapshot.jpg", "/snapshot-cyd.jpg", "/snapshot-cyd-wide.jpg", "/snapshot-meta.json"):
             if not self.valid_token():
                 self.respond(401, b"Token required", "text/plain")
                 return
-            if route in ("/snapshot.jpg", "/snapshot-cyd.jpg"):
-                self.snapshot(portrait=route == "/snapshot-cyd.jpg")
+            if route in ("/snapshot.jpg", "/snapshot-cyd.jpg", "/snapshot-cyd-wide.jpg"):
+                self.snapshot(variant=route)
             else:
                 # No session secrets, UID, IP or account details.
                 status = STATE.status()
                 self.json_response(200, {
                     "has_image": status["has_image"],
                     "has_cyd_image": status["has_cyd_image"],
+                    "has_cyd_wide_image": status["has_cyd_wide_image"],
                     "source_resolution": status["source_resolution"],
                     "last_success": status["last_success"],
                     "capturing": status["capturing"],
@@ -446,9 +457,13 @@ class ApiHandler(BaseHTTPRequestHandler):
         else:
             self.respond(404, b"Not found", "text/plain")
 
-    def snapshot(self, portrait=False):
+    def snapshot(self, variant="/snapshot.jpg"):
         assert STATE is not None
-        file_path = STATE.cyd_image if portrait else STATE.image
+        file_path = {
+            "/snapshot.jpg": STATE.image,
+            "/snapshot-cyd.jpg": STATE.cyd_image,
+            "/snapshot-cyd-wide.jpg": STATE.cyd_wide_image,
+        }[variant]
         try:
             stats = file_path.stat()
             if not stats.st_size:
@@ -506,7 +521,7 @@ button:disabled{opacity:.45}img{display:block;width:100%;max-width:560px;aspect-
 code,pre{overflow-wrap:anywhere;white-space:pre-wrap;color:#a6eeac}
 .err{color:#ffaaaa}.muted{color:#b5c0cf}small{line-height:1.6}
 </style></head><body>
-<h1>📷 UBox Bridge</h1><p>XEGA 4G → zdjęcie na żywo → JPEG 320×240 → HA · JPEG 240×320 → CYD</p>
+<h1>📷 UBox Bridge</h1><p>XEGA 4G → zdjęcie na żywo → JPEG natywny → HA · JPEG 320×240 → CYD</p>
 <div class="card"><h3>Automatyczne zdjęcia</h3>
 <p id="status">Wczytywanie…</p><p id="err" class="err"></p>
 <p><b id="interval"></b></p>
@@ -522,8 +537,11 @@ CYD jedynie sprawdza zapisany JPEG — nie wybudza kamery.</small></p>
 <p id="resolution" class="muted">Odczyt rozdzielczości po nowej klatce.</p>
 <img id="image" alt="Ostatnia klatka">
 <p id="stamp" class="muted">Brak obrazu</p></div>
-<div class="card"><h3>Podgląd CYD (240×320, obrót o 90° w lewo)</h3>
-<img id="cydimage" alt="Widok przygotowany dla CYD"></div>
+<div class="card"><h3>Podgląd CYD (320×240 — USB po prawej)</h3>
+<img id="wideimage" alt="Widok przygotowany dla CYD w poziomie">
+<p class="muted">Nowy firmware 0.2.4 pobiera tę wersję — bez obrotu JPEG na ESP32.</p></div>
+<div class="card"><h3>Starszy podgląd CYD (240×320)</h3>
+<img id="cydimage" alt="Starsza wersja pionowa"></div>
 <div class="card"><h3>CYD / sieć lokalna</h3>
 <p>CYD pobiera zdjęcie np. co 30 sekund, lecz transferuje JPEG tylko wtedy,
 gdy powstała nowa klatka (nagłówek ETag / HTTP 304).</p>
@@ -553,8 +571,8 @@ try{
  document.getElementById('stamp').textContent=s.last_success||'Brak zdjęcia';
  document.getElementById('resolution').textContent='Źródłowy strumień: '+(s.source_resolution||'brak danych — pobierz nowe zdjęcie');
  document.getElementById('diag').textContent=JSON.stringify(s.live_diagnostics||{},null,2);
- document.getElementById('url').textContent='http://IP_HA:8100/snapshot-cyd.jpg?token='+encodeURIComponent(s.snapshot_token);
- if(s.has_image&&last!==s.last_success){last=s.last_success;document.getElementById('image').src='snapshot.jpg?t='+Date.now();if(s.has_cyd_image)document.getElementById('cydimage').src='snapshot-cyd.jpg?t='+Date.now()}
+ document.getElementById('url').textContent='http://IP_HA:8100/snapshot-cyd-wide.jpg?token='+encodeURIComponent(s.snapshot_token);
+ if(s.has_image&&last!==s.last_success){last=s.last_success;document.getElementById('image').src='snapshot.jpg?t='+Date.now();if(s.has_cyd_image)document.getElementById('cydimage').src='snapshot-cyd.jpg?t='+Date.now();if(s.has_cyd_wide_image)document.getElementById('wideimage').src='snapshot-cyd-wide.jpg?t='+Date.now()}
 }catch(e){document.getElementById('status').textContent='Nie można odczytać stanu dodatku.'}
 }
 async function action(route){const r=await fetch(route,{method:'POST'});if(!r.ok)alert('Akcja nie została wykonana (HTTP '+r.status+')');refresh()}

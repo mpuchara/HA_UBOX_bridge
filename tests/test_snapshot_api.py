@@ -22,6 +22,7 @@ class SnapshotApiTests(unittest.TestCase):
             }))
             (root/"last.jpg").write_bytes(b"\xff\xd8photo\xff\xd9")
             (root/"last_cyd.jpg").write_bytes(b"\xff\xd8portrait\xff\xd9")
+            (root/"last_cyd_wide.jpg").write_bytes(b"\xff\xd8landscape\xff\xd9")
             with patch.object(bridge,"DATA",root), patch.object(bridge,"OPTIONS",root/"options.json"):
                 state=bridge.CameraState()
                 with patch.object(bridge,"STATE",state):
@@ -41,6 +42,11 @@ class SnapshotApiTests(unittest.TestCase):
                         unauth=call("/snapshot.jpg")
                         self.assertEqual(unauth[0],401)
                         self.assertEqual(call("/snapshot-cyd.jpg")[0],401)
+                        self.assertEqual(call("/snapshot-cyd-wide.jpg")[0],401)
+                        wide=call("/snapshot-cyd-wide.jpg",{"X-UBox-Token":state.token})
+                        self.assertEqual(wide[0],200)
+                        self.assertEqual(wide[2],b"\xff\xd8landscape\xff\xd9")
+                        self.assertEqual(call("/snapshot-cyd-wide.jpg",{"X-UBox-Token":state.token,"If-None-Match":wide[1]["ETag"]})[0],304)
                         portrait=call("/snapshot-cyd.jpg",{"X-UBox-Token":state.token})
                         self.assertEqual(portrait[0],200)
                         self.assertEqual(portrait[2],b"\xff\xd8portrait\xff\xd9")
@@ -62,6 +68,7 @@ class SnapshotApiTests(unittest.TestCase):
                         state.rotate_snapshot_token()
                         self.assertNotEqual(old,state.token)
                         self.assertEqual(call("/snapshot-cyd.jpg",{"X-UBox-Token":old})[0],401)
+                        self.assertEqual(call("/snapshot-cyd-wide.jpg",{"X-UBox-Token":old})[0],401)
                         self.assertEqual(call("/snapshot.jpg",{"X-UBox-Token":old})[0],401)
                         self.assertEqual(call("/snapshot.jpg",{"X-UBox-Token":state.token})[0],200)
                     finally:

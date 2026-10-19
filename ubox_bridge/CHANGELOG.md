@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.5 — landscape CYD monitor (mounting USB at lower-right)
+
+- Keep high-resolution native HA JPEG and legacy 240×320 portrait snapshot.
+- Generate a *third*, 320×240 landscape CYD JPEG directly from the HD master (Lanczos scaling, JPEG quality 2).
+- New token-protected `/snapshot-cyd-wide.jpg` with ETag/HTTP 304. This file is required by CYD firmware 0.2.4.
+- HA Ingress panel shows the new landscape preview separately.
+- No changes to capture credentials or token. A new camera capture is required after upgrading to generate the landscape file.
+
 ## 0.5.4 — native HD snapshots and quality downscaling
 
 - **Fix:** v0.5.3 accidentally stored the 320×240 *quality-scoring preview* as the HA master. Now decode the chosen frame again at original received H.264/H.265 stream resolution (no enlargement / artificial pixels).

@@ -55,7 +55,9 @@ class LiveCaptureTests(unittest.TestCase):
                 self.assertNotIn("this_is_private",json.dumps(status))
                 self.assertEqual((base/"last.jpg").read_bytes(), b"\xff\xd8render\xff\xd9")
                 self.assertEqual((base/"last_cyd.jpg").read_bytes(), b"\xff\xd8render\xff\xd9")
+                self.assertEqual((base/"last_cyd_wide.jpg").read_bytes(), b"\xff\xd8render\xff\xd9")
                 self.assertTrue(status["has_cyd_image"])
+                self.assertTrue(status["has_cyd_wide_image"])
                 self.assertEqual(status["source_resolution"],"2304x1296")
                 self.assertIn("2304x1296",json.dumps(status["live_diagnostics"]))
                 native_commands=[c for c in command_log if str(c[-1]).endswith("frame.jpg")]
@@ -65,6 +67,10 @@ class LiveCaptureTests(unittest.TestCase):
                 resized_commands=[c for c in command_log if str(c[-1]).endswith("frame_cyd.jpg")]
                 self.assertEqual(len(resized_commands),1)
                 self.assertIn("flags=lanczos",str(resized_commands[0]))
+                wide_commands=[c for c in command_log if str(c[-1]).endswith("frame_cyd_wide.jpg")]
+                self.assertEqual(len(wide_commands),1)
+                self.assertIn("flags=lanczos",str(wide_commands[0]))
+                self.assertNotIn("transpose",str(wide_commands[0]))
                 self.assertFalse(st.busy)
 
     def test_failed_session_keeps_previous_snapshot(self):

@@ -57,3 +57,12 @@ The Ingress panel displays the *actual* source resolution after the next capture
 If the resolution is low (e.g. 640×360), optionally try `stream_index: 1`
 with one manual capture and inspect the result; UBox channel mapping is
 firmware-dependent and could fail. Default `stream_index: 0` is unchanged.
+
+## Landscape CYD (0.5.5)
+
+`/snapshot-cyd-wide.jpg` is a 320×240 image in the camera's upright landscape
+orientation. It is generated from the full-resolution HA master, with JPEG quality 2,
+and is retrieved by CYD firmware 0.2.4+ (TFT landscape rotation 1 or 3).
+Legacy portrait /snapshot-cyd.jpg and native /snapshot.jpg remain unchanged.
+The new route requires the normal token and supports ETag/304.
+Take a new snapshot after installing the addon to create the file.
