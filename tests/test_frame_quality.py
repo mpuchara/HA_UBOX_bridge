@@ -27,6 +27,26 @@ class SelectionTest(unittest.TestCase):
             self.assertEqual(metrics["valid_candidates"],3)
             self.assertLess(frame_artifact_score(paths[2])[0],frame_artifact_score(paths[0])[0])
             self.assertLess(frame_artifact_score(paths[2])[0],frame_artifact_score(paths[1])[0])
+
+    def test_prefers_clean_over_static_noise(self):
+        with tempfile.TemporaryDirectory() as root:
+            bad=Path(root)/"noise.ppm"
+            clean=Path(root)/"clean.ppm"
+            write_ppm(clean)
+            seed=21
+            noisy=bytearray()
+            for y in range(240):
+                for x in range(320):
+                    if y>=165:
+                        seed=(1664525*seed+1013904223)&0xffffffff
+                        noisy.extend(((seed>>8)&255,(seed>>16)&255,(seed>>24)&255))
+                    else:
+                        noisy.extend((65,85,105))
+            bad.write_bytes(b"P6\n320 240\n255\n"+noisy)
+            chosen,metrics=select_cleanest([bad,clean])
+            self.assertEqual(chosen,clean)
+            self.assertGreater(frame_artifact_score(bad)[3],0.20)
+            self.assertEqual(metrics["noise_fraction"],0)
     def test_truncated_frame_rejected(self):
         with tempfile.TemporaryDirectory() as root:
             p=Path(root)/"bad.ppm"

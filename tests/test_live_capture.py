@@ -50,6 +50,8 @@ class LiveCaptureTests(unittest.TestCase):
                 self.assertEqual(status["live_diagnostics"]["stages"]["relay-stream-rsp"],1)
                 self.assertNotIn("this_is_private",json.dumps(status))
                 self.assertEqual((base/"last.jpg").read_bytes(), b"\xff\xd8render\xff\xd9")
+                self.assertEqual((base/"last_cyd.jpg").read_bytes(), b"\xff\xd8render\xff\xd9")
+                self.assertTrue(status["has_cyd_image"])
                 self.assertFalse(st.busy)
 
     def test_failed_session_keeps_previous_snapshot(self):

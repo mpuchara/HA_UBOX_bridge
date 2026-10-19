@@ -21,6 +21,7 @@ class SnapshotApiTests(unittest.TestCase):
                 "interval_minutes":15
             }))
             (root/"last.jpg").write_bytes(b"\xff\xd8photo\xff\xd9")
+            (root/"last_cyd.jpg").write_bytes(b"\xff\xd8portrait\xff\xd9")
             with patch.object(bridge,"DATA",root), patch.object(bridge,"OPTIONS",root/"options.json"):
                 state=bridge.CameraState()
                 with patch.object(bridge,"STATE",state):
@@ -39,6 +40,13 @@ class SnapshotApiTests(unittest.TestCase):
                     try:
                         unauth=call("/snapshot.jpg")
                         self.assertEqual(unauth[0],401)
+                        self.assertEqual(call("/snapshot-cyd.jpg")[0],401)
+                        portrait=call("/snapshot-cyd.jpg",{"X-UBox-Token":state.token})
+                        self.assertEqual(portrait[0],200)
+                        self.assertEqual(portrait[2],b"\xff\xd8portrait\xff\xd9")
+                        portrait_etag=portrait[1]["ETag"]
+                        unchanged=call("/snapshot-cyd.jpg",{"X-UBox-Token":state.token,"If-None-Match":portrait_etag})
+                        self.assertEqual(unchanged[0],304)
                         one=call("/snapshot.jpg",{"X-UBox-Token":state.token})
                         self.assertEqual(one[0],200)
                         self.assertEqual(one[2],b"\xff\xd8photo\xff\xd9")
@@ -53,6 +61,7 @@ class SnapshotApiTests(unittest.TestCase):
                         old=state.token
                         state.rotate_snapshot_token()
                         self.assertNotEqual(old,state.token)
+                        self.assertEqual(call("/snapshot-cyd.jpg",{"X-UBox-Token":old})[0],401)
                         self.assertEqual(call("/snapshot.jpg",{"X-UBox-Token":old})[0],401)
                         self.assertEqual(call("/snapshot.jpg",{"X-UBox-Token":state.token})[0],200)
                     finally:
