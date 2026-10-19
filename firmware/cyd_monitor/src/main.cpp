@@ -6,6 +6,9 @@
 #include <WiFiManager.h>
 #include <TFT_eSPI.h>
 #include <TJpg_Decoder.h>
+#include <SPI.h>
+#include <XPT2046_Touchscreen.h>
+#include <math.h>
 #include <esp_system.h>
 #include <memory>
 #include <new>
@@ -15,6 +18,8 @@
 static constexpr int TFT_BACKLIGHT_PIN = 21;
 static constexpr int BOOT_BUTTON_PIN = 0;
 static constexpr unsigned long REFRESH_MS = 30000UL;
+static constexpr unsigned long PTZ_POLL_MS=2500UL;
+static constexpr unsigned long PTZ_REFRESH_TIMEOUT_MS=110000UL;
 static constexpr size_t MAX_JPEG_BYTES = 100 * 1024;
 static constexpr uint8_t DEFAULT_SCREEN_ROTATION = 3; // LCD upright with USB lower-right when board is turned clockwise
 
@@ -27,6 +32,15 @@ unsigned long lastReconnect = 0;
 unsigned long bootHeldFrom = 0;
 bool buttonResetTriggered = false;
 uint8_t screenRotation = DEFAULT_SCREEN_ROTATION;
+// Touch XPT2046 on separate HSPI from display (pins 25/39/32/33/36).
+SPIClass touchSPI(HSPI);
+XPT2046_Touchscreen touch(33,36);
+bool touchReady=false,touchCalibrated=false,touching=false,waitingForPtzImage=false;
+float tA=0,tB=0,tC=0,tD=0,tE=0,tF=0;
+uint8_t touchCalRotation=DEFAULT_SCREEN_ROTATION;
+int16_t dragStartX=0,dragStartY=0,dragCurrentX=0,dragCurrentY=0;
+unsigned long dragStartMs=0,gestureNextAllowed=0,ptzImageDeadline=0;
+
 
 // HA add-on v0.5.5+ provides landscape 320x240 JPEG, orientation
 // adjusted by the ILI9341's hardware rotation (MADCTL), not MCU remapping.
@@ -77,6 +91,84 @@ void saveRotation(uint8_t rotation) {
   if (!prefs.begin("ubox-cyd", false)) return;
   prefs.putUChar("screen_rot", rotation);
   prefs.end();
+}
+
+void loadTouchCalibration(){
+  Preferences prefs;
+  if(!prefs.begin("ubox-cyd",true))return;
+  touchCalibrated=prefs.getBool("tc_ok",false);
+  touchCalRotation=prefs.getUChar("tc_rot",DEFAULT_SCREEN_ROTATION);
+  tA=prefs.getFloat("tc_a",0);tB=prefs.getFloat("tc_b",0);
+  tC=prefs.getFloat("tc_c",0);tD=prefs.getFloat("tc_d",0);
+  tE=prefs.getFloat("tc_e",0);tF=prefs.getFloat("tc_f",0);
+  prefs.end();
+  if(!isfinite(tA)||!isfinite(tB)||!isfinite(tC)||!isfinite(tD)||!isfinite(tE)||!isfinite(tF))
+    touchCalibrated=false;
+}
+bool readTouchXY(int16_t& x,int16_t& y){
+  if(!touchReady||!touchCalibrated||!touch.touched())return false;
+  const TS_Point p=touch.getPoint();
+  float xf=tA*p.x+tB*p.y+tC;
+  float yf=tD*p.x+tE*p.y+tF;
+  if(screenRotation!=touchCalRotation){xf=319-xf;yf=239-yf;}
+  if(!isfinite(xf)||!isfinite(yf)||xf < -16||xf > 335||yf < -16||yf > 255)return false;
+  x=constrain(int(roundf(xf)),0,319);y=constrain(int(roundf(yf)),0,239);
+  return true;
+}
+bool calibrateTarget(int16_t sx,int16_t sy,int16_t& rx,int16_t& ry,int index){
+  tft.fillScreen(TFT_BLACK);
+  writeScreenLine("DOTYK: kalibracja "+String(index)+"/3",8);
+  writeScreenLine("Dotknij znaku +",37,TFT_YELLOW);
+  tft.drawFastHLine(sx-13,sy,27,TFT_YELLOW);
+  tft.drawFastVLine(sx,sy-13,27,TFT_YELLOW);
+  const unsigned long beginAt=millis();
+  while(millis()-beginAt < 14000UL){
+    if(touch.touched()){
+      int32_t sumx=0,sumy=0;int count=0;
+      const unsigned long started=millis();
+      while(touch.touched()&&millis()-started < 650UL){
+        const TS_Point pt=touch.getPoint();
+        if(pt.z>100){sumx+=pt.x;sumy+=pt.y;count++;}
+        delay(25);
+      }
+      while(touch.touched()&&millis()-started < 1500UL)delay(25);
+      if(count>=2){rx=sumx/count;ry=sumy/count;return true;}
+    }
+    delay(30);
+  }
+  return false;
+}
+bool calibrateTouch(){
+  if(!touchReady)return false;
+  const int16_t sx[3]={25,295,25},sy[3]={65,65,210};
+  int16_t rx[3],ry[3];
+  for(int i=0;i<3;++i){
+    if(!calibrateTarget(sx[i],sy[i],rx[i],ry[i],i+1)){
+      tft.fillScreen(TFT_BLACK);
+      writeScreenLine("Kalibracja anulowana",10,TFT_YELLOW);
+      delay(650);return false;
+    }
+  }
+  const float ux=rx[1]-rx[0],uy=ry[1]-ry[0];
+  const float vx=rx[2]-rx[0],vy=ry[2]-ry[0];
+  const float det=ux*vy-uy*vx;
+  if(fabsf(det)<80000){writeScreenLine("Blad kalibracji",12,TFT_RED);return false;}
+  tA=270.0f*vy/det;tB=-270.0f*vx/det;
+  tD=-145.0f*uy/det;tE=145.0f*ux/det;
+  tC=25.0f-tA*rx[0]-tB*ry[0];tF=65.0f-tD*rx[0]-tE*ry[0];
+  touchCalRotation=screenRotation;touchCalibrated=true;
+  Preferences prefs;
+  if(prefs.begin("ubox-cyd",false)){
+    prefs.putBool("tc_ok",true);prefs.putUChar("tc_rot",screenRotation);
+    prefs.putFloat("tc_a",tA);prefs.putFloat("tc_b",tB);
+    prefs.putFloat("tc_c",tC);prefs.putFloat("tc_d",tD);
+    prefs.putFloat("tc_e",tE);prefs.putFloat("tc_f",tF);
+    prefs.end();
+  }
+  tft.fillScreen(TFT_BLACK);
+  writeScreenLine("Kalibracja gotowa!",8,TFT_GREEN);
+  delay(700);tft.fillScreen(TFT_BLACK);touching=false;
+  return true;
 }
 
 void persistSettings(const String& host, const String& token) {
@@ -273,6 +365,7 @@ void pollImage() {
   const bool fullFrame = (jpegPixelsWritten == static_cast<uint32_t>(JPEG_WIDTH) * JPEG_HEIGHT);
   if (result == JDR_OK && !jpegGeometryError && fullFrame) {
     lastEtag = etag;
+    waitingForPtzImage=false;
     Serial.printf("New landscape JPEG: %u bytes; directly drawn at 320x240\n",
                   static_cast<unsigned>(received));
   } else {
@@ -288,6 +381,51 @@ void pollImage() {
   http.end();
 }
 
+bool sendPtz(const char* direction){
+  if(WiFi.status()!=WL_CONNECTED||haHost.isEmpty()||snapshotToken.isEmpty())return false;
+  WiFiClient client;
+  HTTPClient http;
+  if(!http.begin(client,"http://"+haHost+":8100/ptz"))return false;
+  http.setReuse(false);http.setTimeout(4000);
+  http.addHeader("X-UBox-Token",snapshotToken);
+  http.addHeader("Content-Type","application/json");
+  const String json=String("{\"direction\":\"")+direction+"\"}";
+  const int response=http.POST(json);http.end();
+  if(response!=202){
+    Serial.printf("PTZ rejected HTTP %d\n",response);
+    showMessage(response==409?"PTZ zajety":"Blad PTZ",TFT_YELLOW);
+    return false;
+  }
+  showMessage("Ruch "+String(direction)+"...",TFT_CYAN);
+  waitingForPtzImage=true;
+  ptzImageDeadline=millis()+PTZ_REFRESH_TIMEOUT_MS;
+  lastPoll=0;
+  return true;
+}
+void checkTouch(){
+  if(!touchReady||!touchCalibrated)return;
+  int16_t x=0,y=0;
+  const bool pressed=readTouchXY(x,y);
+  const unsigned long now=millis();
+  if(pressed){
+    if(!touching){
+      touching=true;dragStartX=x;dragStartY=y;
+      dragCurrentX=x;dragCurrentY=y;dragStartMs=now;
+    }else{dragCurrentX=x;dragCurrentY=y;}
+  }else if(touching){
+    touching=false;
+    const int dx=dragCurrentX-dragStartX,dy=dragCurrentY-dragStartY;
+    const unsigned long duration=now-dragStartMs;
+    if(duration<90||duration>2100||now<gestureNextAllowed||waitingForPtzImage)return;
+    const int ax=abs(dx),ay=abs(dy);
+    if(ax<38&&ay<38)return;
+    const char* direction=nullptr;
+    if(ax>ay*1.25f)direction=dx>0?"right":"left";
+    else if(ay>ax*1.25f)direction=dy>0?"down":"up";
+    if(direction){gestureNextAllowed=now+6500UL;sendPtz(direction);}
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
@@ -299,6 +437,11 @@ void setup() {
   tft.init();
   tft.setRotation(screenRotation); // 320x240, default USB at right-lower corner
   displaySelfTest();
+  touchSPI.begin(25,39,32,33);
+  touchReady=touch.begin(touchSPI);
+  touch.setRotation(0);
+  loadTouchCalibration();
+  if(touchReady&&!touchCalibrated)calibrateTouch();
   TJpgDec.setJpgScale(1);
   TJpgDec.setSwapBytes(true);
   TJpgDec.setCallback(tftBlock);
@@ -320,7 +463,9 @@ void loop() {
   } else if (bootHeldFrom) {
     const unsigned long held = millis() - bootHeldFrom;
     bootHeldFrom = 0;
-    if (!buttonResetTriggered && held >= 70 && held < 1800) {
+    if(!buttonResetTriggered&&held>=2100&&held<4900){
+      calibrateTouch();lastEtag="";lastPoll=0;
+    }else if (!buttonResetTriggered && held >= 70 && held < 1800) {
       screenRotation = (screenRotation == 3) ? 1 : 3;
       saveRotation(screenRotation);
       tft.setRotation(screenRotation);
@@ -337,9 +482,15 @@ void loop() {
       WiFi.reconnect();
     }
   }
-  if (lastPoll == 0 || millis() - lastPoll >= REFRESH_MS) {
+  checkTouch();
+  if(waitingForPtzImage&&static_cast<int32_t>(millis()-ptzImageDeadline)>=0){
+    waitingForPtzImage=false;
+    showMessage("PTZ: brak nowego zdjecia",TFT_YELLOW);
+  }
+  const unsigned long interval=waitingForPtzImage?PTZ_POLL_MS:REFRESH_MS;
+  if (lastPoll == 0 || millis() - lastPoll >= interval) {
     lastPoll = millis();
     pollImage();
   }
-  delay(100);
+  delay(45);
 }
