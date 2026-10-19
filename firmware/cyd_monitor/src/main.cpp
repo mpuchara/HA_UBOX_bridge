@@ -96,6 +96,9 @@ bool configureNetworking(bool forcePortal) {
   const String apName = "UBox-CYD-" + String(nonce & 0xffff, HEX);
   const String apPassword = "ucyd" + String(nonce, HEX) + "!";
   // 4 + (up to 8) + 1 chars, always >= 8 bytes.
+  wifiManager.setAPCallback([&](WiFiManager*) {
+    configPortalScreen(apName, apPassword);
+  });
   bool connected = false;
   if (forcePortal || haHost.isEmpty() || snapshotToken.isEmpty()) {
     configPortalScreen(apName, apPassword);
