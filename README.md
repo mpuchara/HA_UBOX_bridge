@@ -1,5 +1,11 @@
 # HA UBox Bridge
 
+## CYD — flash jednym kliknięciem (USB / COM4)
+
+[Otwórz instalator CYD przez Chrome/Edge](https://mpuchara.github.io/HA_UBOX_bridge/) — instalator ESP Web Tools, a następnie konfiguracja Wi-Fi, adresu HA i tokenu UBox przez własny hotspot ESP32. **Jeżeli strona jeszcze nie jest dostępna, należy włączyć GitHub Pages w Settings → Pages → Source: GitHub Actions** i poczekać na publikację.
+
+[Szczegółowa instrukcja po polsku](docs/CYD_WEB_INSTALL.md).
+
 Home Assistant OS app (Raspberry Pi 4 ARM64 / amd64) for the LTE/solar
 UBox XEGA XG-01-EU4G and other UBox cameras. The **working** live
 snapshot path was validated on the XEGA by the camera owner on

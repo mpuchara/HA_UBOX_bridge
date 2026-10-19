@@ -17,7 +17,6 @@ jobs:
       - name: Check CYD project files and configuration placeholders
         run: |
           test -f firmware/cyd_monitor/platformio.ini
-          test -f firmware/cyd_monitor/include/config.h.example
           test ! -f firmware/cyd_monitor/include/config.h
       - run: python -m unittest discover -s tests -v
       - run: python scripts/package.py
@@ -58,5 +57,5 @@ jobs:
         run: python -m pip install platformio
       - name: Build CYD ESP32-2432S028 firmware
         run: |
-          cp firmware/cyd_monitor/include/config.h.example firmware/cyd_monitor/include/config.h
+          test ! -f firmware/cyd_monitor/include/config.h
           pio run -d firmware/cyd_monitor
