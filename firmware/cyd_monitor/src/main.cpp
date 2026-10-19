@@ -26,9 +26,35 @@ unsigned long lastReconnect = 0;
 unsigned long bootHeldFrom = 0;
 bool buttonResetTriggered = false;
 
+// The HA add-on sends 320x240 JPEG. Turn the pixels 90 degrees LEFT
+// into the CYD's native 240x320 portrait orientation.
+// A single JPEG MCU is <=16x16, so only a small scratch buffer is needed.
+// Unlike a full-frame rotation this works on a classic ESP32 without PSRAM.
+static constexpr uint16_t JPEG_WIDTH = 320;
+static constexpr uint16_t JPEG_HEIGHT = 240;
+static uint16_t rotatedBlock[16 * 16];
+static bool jpegGeometryError = false;
+
 bool tftBlock(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* colors) {
-  if (x >= tft.width() || y >= tft.height()) return false;
-  tft.pushImage(x, y, w, h, colors);
+  if (!colors || x < 0 || y < 0 || !w || !h ||
+      static_cast<uint32_t>(w) * h > 16 * 16 ||
+      static_cast<uint32_t>(x) + w > JPEG_WIDTH ||
+      static_cast<uint32_t>(y) + h > JPEG_HEIGHT) {
+    jpegGeometryError = true;
+    return false;
+  }
+
+  // Original pixel (x+i, y+j) -> (y+j, 319-(x+i)).
+  // The rotated JPEG occupies the full 240x320 ILI9341 panel.
+  const int16_t dstX = y;
+  const int16_t dstY = JPEG_WIDTH - x - w;
+  for (uint16_t j = 0; j < h; ++j) {
+    for (uint16_t i = 0; i < w; ++i) {
+      rotatedBlock[static_cast<size_t>(w - 1 - i) * h + j] =
+          colors[static_cast<size_t>(j) * w + i];
+    }
+  }
+  tft.pushImage(dstX, dstY, h, w, rotatedBlock);
   return true;
 }
 
@@ -208,12 +234,29 @@ void pollImage() {
     return;
   }
   const String etag = http.header("ETag");
+  // Avoid drawing an unexpected image geometry into an incorrectly rotated
+  // screen; this also prevents stale pixels and apparent horizontal seams.
+  uint16_t jpgWidth = 0, jpgHeight = 0;
+  if (TJpgDec.getJpgSize(&jpgWidth, &jpgHeight, bytes.get(), static_cast<uint32_t>(received)) != JDR_OK ||
+      jpgWidth != JPEG_WIDTH || jpgHeight != JPEG_HEIGHT) {
+    Serial.printf("Unexpected JPEG geometry: %ux%u (expected %ux%u)\n",
+                  jpgWidth, jpgHeight, JPEG_WIDTH, JPEG_HEIGHT);
+    showMessage("Niewlasciwy rozmiar JPEG", TFT_RED);
+    http.end();
+    return;
+  }
+  jpegGeometryError = false;
+  // Keep the SPI bus in one transaction for all JPEG MCU writes.
+  tft.startWrite();
   const JRESULT result = TJpgDec.drawJpg(0, 0, bytes.get(), static_cast<uint32_t>(received));
-  if (result == JDR_OK) {
+  tft.endWrite();
+  if (result == JDR_OK && !jpegGeometryError) {
     lastEtag = etag;
-    Serial.printf("New JPEG: %u bytes\n", static_cast<unsigned>(received));
+    Serial.printf("New JPEG: %u bytes; drawn 240x320 left rotation\n",
+                  static_cast<unsigned>(received));
   } else {
-    Serial.printf("JPEG error: %d\n", static_cast<int>(result));
+    Serial.printf("JPEG error: %d (geometry %d)\n",
+                  static_cast<int>(result), static_cast<int>(jpegGeometryError));
     showMessage("Blad dekodowania JPEG", TFT_RED);
   }
   http.end();
@@ -225,7 +268,7 @@ void setup() {
   pinMode(TFT_BACKLIGHT_PIN, OUTPUT);
   digitalWrite(TFT_BACKLIGHT_PIN, HIGH);
   tft.init();
-  tft.setRotation(1); // 320x240 landscape
+  tft.setRotation(0); // 240x320 portrait; JPEG rotates 90 degrees left in tftBlock()
   tft.fillScreen(TFT_BLACK);
   TJpgDec.setJpgScale(1);
   TJpgDec.setSwapBytes(true);

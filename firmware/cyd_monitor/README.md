@@ -11,7 +11,7 @@ hasło. Połącz telefon z hotspotem, wejdź na `http://192.168.4.1`,
 wybierz Wi-Fi 2.4 GHz oraz wpisz IP Raspberry Pi z HA (bez portu)
 i token UBox Bridge. Ustawienia zapiszą się w NVS ESP32.
 
-CYD odpyta HA co 30 sekund. Gdy JPEG się nie zmienił, HA odpowie HTTP
+Obraz z HA 320×240 jest obracany o 90° w lewo i wyświetlany na całym ekranie CYD 240×320. SPI wyświetlacza działa z 27 MHz, aby ograniczyć artefakty transmisji.\n\nCYD odpyta HA co 30 sekund. Gdy JPEG się nie zmienił, HA odpowie HTTP
 304; sam odczyt zdjęcia nie uruchamia transmisji LTE.
 Pobieranie świeżej klatki ustaw w dodatku HA `interval_minutes`.
 
@@ -29,3 +29,5 @@ Ten firmware obsługuje klasyczny CYD ESP32-2432S028 z ILI9341.
 Warianty o innych pinach mogą wymagać zmian `platformio.ini`.
 Firmware przechowuje token w NVS i łączy się z HA przez lokalne HTTP,
 dlatego nie wystawiaj portu HA 8100 na Internet.
+
+Jeżeli poziome pasy pozostają, otwórz ostatni obraz w panelu UBox Bridge na telefonie. Jeżeli są widoczne także tam, pochodzą z niekompletnych klatek transmisji P4P i nie naprawi ich sterownik LCD.

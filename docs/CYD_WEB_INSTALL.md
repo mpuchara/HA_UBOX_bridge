@@ -46,3 +46,7 @@ Ta kompilacja jest dla klasycznego ESP32-2432S028 (2.8-calowy ILI9341).
 Nie instaluj na innych wariantach CYD (ESP32-S3, ESP32-P4 itp.).
 Firmware działa z GPIO panelu klasycznego CYD, ale nie był jeszcze
 testowany na fizycznej płytce tego użytkownika.
+
+## Orientacja i pasy obrazu
+
+Od wersji CYD 0.2.1 obraz 320×240 z HA jest obracany w ESP32 o 90° w lewo i rysowany jako 240×320 na pionowo ustawionym panelu. Taktowanie SPI wyświetlacza obniżono do 27 MHz, a transfer JPEG jest wykonywany jako jedna transakcja. Jeżeli pasy widać także w przeglądarce w panelu dodatku HA, ich przyczyną jest źródłowy strumień UBox, a nie sterownik CYD.
