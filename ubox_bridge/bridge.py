@@ -9,7 +9,7 @@ from __future__ import annotations
 import hmac
 from cloud_api import UBoxApiError, discover_devices
 from frame_quality import select_cleanest
-from image_filters import landscape_filter
+from image_filters import landscape_filter, cyd_wide_filter
 import json
 import logging
 import os
@@ -186,6 +186,8 @@ class CameraState:
                 "live_diagnostics": self.live_diagnostics,
                 "last_image_source": self.last_source,
                 "source_resolution": self.source_resolution,
+                "cyd_fit_mode": self.options.get("cyd_fit_mode", "blur"),
+                "cyd_focus_x": int(self.options.get("cyd_focus_x", 50)),
                 "has_image": self.image.is_file() and self.image.stat().st_size > 0,
                 "has_cyd_image": self.cyd_image.is_file() and self.cyd_image.stat().st_size > 0,
                 "has_cyd_wide_image": self.cyd_wide_image.is_file() and self.cyd_wide_image.stat().st_size > 0,
@@ -341,7 +343,9 @@ class CameraState:
                     if rotate:
                         vf = landscape_filter(90)
                     else:
-                        vf = landscape_filter(self.options.get("camera_rotation", 90))
+                        # No rotation for wide CYD even with legacy camera_rotation=90.
+                        vf = cyd_wide_filter(self.options.get("cyd_fit_mode", "blur"),
+                                             self.options.get("cyd_focus_x", 50))
                     resized = subprocess.run(
                         [FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
                          "-i", str(jpeg), "-vf", vf,
@@ -376,6 +380,26 @@ class CameraState:
             with self.lock:
                 self.busy = False
 
+    def rebuild_cyd_wide_from_cache(self):
+        """Reframe cached HA JPEG on startup without waking the LTE camera."""
+        if not self.image.is_file() or not self.image.stat().st_size:
+            return False
+        with tempfile.TemporaryDirectory(prefix="reframe-", dir=DATA) as folder:
+            target = Path(folder) / "wide.jpg"
+            vf = cyd_wide_filter(self.options.get("cyd_fit_mode", "blur"),
+                                 self.options.get("cyd_focus_x", 50))
+            result = subprocess.run(
+                [FFMPEG, "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+                 "-i", str(self.image), "-vf", vf, "-frames:v", "1",
+                 "-pix_fmt", "yuvj420p", "-q:v", "2", str(target)],
+                capture_output=True, timeout=30, check=False,
+            )
+            if result.returncode or not target.is_file() or not target.stat().st_size:
+                raise RuntimeError("Nie udalo sie przygotowac kadru CYD z cache HA.")
+            os.replace(target, self.cyd_wide_image)
+        LOG.info("Reframed CYD JPEG from HA cache without LTE wake-up")
+        return True
+
     def fail(self, message: str):
         with self.lock:
             self.last_error = message
@@ -386,7 +410,7 @@ STATE: CameraState | None = None
 
 
 class ApiHandler(BaseHTTPRequestHandler):
-    server_version = "UBoxBridge/0.5.6"
+    server_version = "UBoxBridge/0.5.7"
 
     def log_message(self, fmt, *args):
         # Never log URLs or query strings containing the snapshot token.
@@ -604,6 +628,10 @@ def main():
     global STATE
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     STATE = CameraState()
+    try:
+        STATE.rebuild_cyd_wide_from_cache()
+    except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
+        LOG.warning("Cached CYD image reframe failed: %s", exc)
     if not STATE.configured:
         LOG.info("Camera not configured yet: set account_email/password or uid/device_password")
     if STATE.account_configured:
