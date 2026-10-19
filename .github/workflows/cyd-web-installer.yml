@@ -84,8 +84,8 @@ jobs:
           set -euo pipefail
           test -s site/firmware/ubox-cyd-esp32.bin
           cp windows-installer/Start-Installer.cmd windows-installer/Install-CYD.ps1 windows-installer/README.md site/
+          sha256sum -c site/firmware/SHA256SUMS.txt
           cd site
-          sha256sum -c firmware/SHA256SUMS.txt
           zip -r ../UBox-CYD-Windows-Browser-Installer.zip .
           cd ..
           unzip -t UBox-CYD-Windows-Browser-Installer.zip
