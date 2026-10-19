@@ -5,6 +5,7 @@
 #include <TFT_eSPI.h>
 #include <TJpg_Decoder.h>
 #include <memory>
+#include <new>
 #include "config.h"
 
 // ESP32-2432S028 (classic 2.8" Cheap Yellow Display / ILI9341).
@@ -87,7 +88,7 @@ void pollImage() {
     return;
   }
   auto* stream = http.getStreamPtr();
-  stream->setTimeout(7);
+  stream->setTimeout(7000);
   const size_t received = stream->readBytes(bytes.get(), count);
   if (received != static_cast<size_t>(count)) {
     showStatus("Przerwane pobieranie", TFT_RED);
