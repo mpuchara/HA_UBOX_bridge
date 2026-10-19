@@ -33,18 +33,52 @@ SNAPSHOT_PORT = int(os.environ.get("UBOX_SNAPSHOT_PORT", "8100"))
 CAPTURE_TIMEOUT = 150
 
 def parse_driver_summary(stderr, stdout, code, size):
-    """Allowlisted counters only. Never expose raw upstream output or addresses."""
-    raw=(stderr+b"\n"+stdout)[-1048576:].decode("utf-8","replace")
-    return {
-        "return_code": code, "hevc_bytes": size,
-        "wake_packets": int((re.findall(r"wake burst:\s*(\d+) knocks",raw) or ["0"])[-1]),
-        "wake_replies": len(re.findall("wake-phase pkt",raw)),
-        "stage2_packets": len(re.findall("stage2 pkt",raw)),
-        "relay_accepted": len(re.findall("got rlystreamrsp",raw)),
-        "no_video_retries": len(re.findall(r"attempt \d+/\d+: no video",raw)),
-        "python_errors": len(re.findall("Traceback|ModuleNotFoundError|ImportError",raw)),
-    }
+    """Summarize P4P progress using allowlisted integers, codes and lengths.
 
+    NEVER expose raw upstream output: it may include UIDs, public/private IPs,
+    endpoint ports, session tags, and potentially device authentication.
+    Wake 'replies' in upstream output are ANY UDP packet, not camera ACKs.
+    """
+    from collections import Counter
+
+    raw = (stderr + b"\n" + stdout)[-1048576:].decode("utf-8", "replace")
+    packet_counts = {"wake": Counter(), "stage2": Counter()}
+    for phase, length, msg_type in re.findall(
+        r"\[relay\]\s+(wake-phase|stage2) pkt\s+(\d+)B\s+msg=0x([0-9a-fA-F]{8})\b",
+        raw,
+    ):
+        if int(length) > 65535:
+            continue
+        section = "wake" if phase == "wake-phase" else "stage2"
+        packet_counts[section][("0x" + msg_type.lower(), int(length))] += 1
+
+    def histogram(counter):
+        # Sorted and bounded. No raw packet payloads, addresses or identifiers.
+        return [
+            {"msg_type": msg_type, "bytes": length, "count": count}
+            for (msg_type, length), count in sorted(
+                counter.items(), key=lambda pair: (-pair[1], pair[0])
+            )[:16]
+        ]
+
+    return {
+        "return_code": int(code),
+        "hevc_bytes": int(size),
+        "wake_packets": int((re.findall(r"wake burst:\s*(\d+) knocks", raw) or ["0"])[-1]),
+        "wake_replies": len(re.findall("wake-phase pkt", raw)),
+        "stage2_packets": len(re.findall("stage2 pkt", raw)),
+        "relay_accepted": len(re.findall("got rlystreamrsp", raw)),
+        "no_video_retries": len(re.findall(r"attempt \d+/\d+: no video", raw)),
+        "python_errors": len(re.findall("Traceback|ModuleNotFoundError|ImportError", raw)),
+        "wake_message_types": histogram(packet_counts["wake"]),
+        "stage2_message_types": histogram(packet_counts["stage2"]),
+        "camera_knock_packets_seen": sum(count for (msg, _), count in (
+            packet_counts["wake"] + packet_counts["stage2"]
+        ).items() if msg == "0x0012130e"),
+        "camera_info_packets_seen": sum(count for (msg, _), count in (
+            packet_counts["wake"] + packet_counts["stage2"]
+        ).items() if msg == "0x0012130c"),
+    }
 
 
 def utc_now() -> str:
@@ -251,7 +285,7 @@ STATE: CameraState | None = None
 
 
 class ApiHandler(BaseHTTPRequestHandler):
-    server_version = "UBoxBridge/0.2.1"
+    server_version = "UBoxBridge/0.2.2"
 
     def log_message(self, fmt, *args):
         # Never log URLs or query strings containing the snapshot token.
@@ -339,7 +373,7 @@ code{overflow-wrap:anywhere;color:#a6eeac}.err{color:#ffaaaa}</style></head>
 <body><h1>📷 UBox Bridge</h1><p>UBox P4P → JPEG 320×240 → Home Assistant / ESP32 CYD</p>
 <div class="card"><p id="status">Wczytywanie…</p><p id="err" class="err"></p>
 <button id="capture">Pobierz nową klatkę</button> <button id="discover">Wykryj kamery UBox</button><p id="devices"></p></div>
-<div class="card"><b>Diagnostyka P4P</b><pre id="diag"></pre></div><div class="card"><img id="image" alt="Ostatnia klatka"><p id="stamp">Brak zdjęcia</p></div>
+<div class="card"><b>Diagnostyka P4P</b><p><small>Odpowiedzi na wybudzanie mogą pochodzić od serwerów UBox — same liczby pakietów nie potwierdzają połączenia z kamerą. Sekcje wake_message_types i stage2_message_types pokazują wyłącznie typy, rozmiary i liczbę pakietów (bez danych prywatnych).</small></p><pre id="diag" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></div><div class="card"><img id="image" alt="Ostatnia klatka"><p id="stamp">Brak zdjęcia</p></div>
 <div class="card"><b>Adres dla CYD (sieć lokalna):</b><p><code id="url"></code></p>
 <small>Zamień IP_HA na lokalny adres Raspberry Pi. Nie udostępniaj URL z tokenem publicznie.</small></div>
 <script>let last='';async function refresh(){try{let r=await fetch('status',{cache:'no-store'}),s=await r.json();

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.2 — message-type diagnostics
+
+- Whitelisted protocol message types, packet sizes and counts separately for wake and stream-negotiation phases.
+- Distinguishes relay replies from actual camera knock/device-info messages.
+- No packet contents, credentials, UIDs, IP addresses, ports or session tags are exposed in logs or UI.
+- Kept upstream P4P handshake unchanged pending evidence from message histograms.
+
+
 ## 0.2.1
 
 - Safe P4P diagnostics and relay-stage counters in panel and logs.
