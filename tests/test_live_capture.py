@@ -24,12 +24,16 @@ class LiveCaptureTests(unittest.TestCase):
                 "uid":"ABCDEF0123456789ABCDE", "device_password":"this_is_private",
                 "live_timeout_seconds":15,
             }))
+            command_log=[]
             diag={"backend":"ubox-web","relay_established":True,
                 "discovered_relay_count":4,"codec":"h264",
                 "video_frames_collected":15,"stream_bytes":100,
                 "stages":{"relay-stream-rsp":1},
                 "counters":{"rx":200,"h264Frames":15}}
             def run(cmd, **kwargs):
+                command_log.append(cmd)
+                if str(cmd[0]).endswith("ffprobe"):
+                    return Process(stdout=b'{"streams":[{"width":2304,"height":1296}]}')
                 if str(cmd[0]).endswith("node"):
                     Path(kwargs["env"]["UBOX_OUTPUT"]).write_bytes(b"\x00\x00\x01\x65")
                     return Process(stdout=json.dumps({"ok":True, "diagnostics":diag}).encode())
@@ -52,6 +56,15 @@ class LiveCaptureTests(unittest.TestCase):
                 self.assertEqual((base/"last.jpg").read_bytes(), b"\xff\xd8render\xff\xd9")
                 self.assertEqual((base/"last_cyd.jpg").read_bytes(), b"\xff\xd8render\xff\xd9")
                 self.assertTrue(status["has_cyd_image"])
+                self.assertEqual(status["source_resolution"],"2304x1296")
+                self.assertIn("2304x1296",json.dumps(status["live_diagnostics"]))
+                native_commands=[c for c in command_log if str(c[-1]).endswith("frame.jpg")]
+                self.assertEqual(len(native_commands),1)
+                self.assertIn("select=eq(n\\,0)", str(native_commands[0]))
+                self.assertNotIn("scale=320",str(native_commands[0]))
+                resized_commands=[c for c in command_log if str(c[-1]).endswith("frame_cyd.jpg")]
+                self.assertEqual(len(resized_commands),1)
+                self.assertIn("flags=lanczos",str(resized_commands[0]))
                 self.assertFalse(st.busy)
 
     def test_failed_session_keeps_previous_snapshot(self):

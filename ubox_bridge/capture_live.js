@@ -80,6 +80,7 @@ async function run() {
   let success = false, summary = null, errorCode = null;
   const maxSeconds = Math.max(10,Math.min(75,safeInteger(process.env.UBOX_WAIT_SECONDS,45,75)));
   const deadline = Date.now() + maxSeconds*1000;
+  const streamIndex = safeInteger(process.env.UBOX_STREAM_INDEX,0,1);
   try {
     await manager.start({
       uid,
@@ -89,7 +90,7 @@ async function run() {
       loginPwd: "admin",
       device_type: 0,
       devType: 2,
-      streamIndex: 0,
+      streamIndex,
     }, {queryRetryAttempts:10, relayWakeupAttempts:20, relayStreamReqAttempts:14});
     let firstFrameAt = 0;
     while (Date.now() < deadline) {

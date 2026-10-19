@@ -46,3 +46,7 @@ pokazane na ekranie (bez mylących liter I/O i cyfr 0/1). Hasło jest
 jednorazowe dla sesji konfiguracyjnej i zabezpiecza hotspot WPA2.
 Najpierw zaktualizuj dodatek do 0.5.3 i naciśnij 'Zrób nowe zdjęcie',
 a dopiero później aktualizuj firmware CYD.
+
+Firmware CYD v0.2.3 nie wymaga aktualizacji po UBox Bridge v0.5.4.
+Nowe zdjęcia są przygotowywane z rozdzielczości źródłowej przez HA,
+nie z wcześniejszego JPEG 320×240.

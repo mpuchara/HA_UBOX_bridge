@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.4 — native HD snapshots and quality downscaling
+
+- **Fix:** v0.5.3 accidentally stored the 320×240 *quality-scoring preview* as the HA master. Now decode the chosen frame again at original received H.264/H.265 stream resolution (no enlargement / artificial pixels).
+- CYD's 240×320 JPEG is produced separately from the high-resolution HA master with Lanczos scaling, 90° left rotation, high JPEG quality (q=2), and center cropping to fill the LCD.
+- Show the **actual P4P stream resolution** in the Ingress panel and diagnostics. A 2K camera can still send low-resolution video over P4P; the integration cannot manufacture missing pixels.
+- Optional `stream_index: 0|1`, default 0: allows manually testing the camera's alternative stream if the captured resolution is low (mapping varies by firmware). No automatic camera wake retries.
+- No CYD firmware changes necessary if already on v0.2.3. Existing token and Wi-Fi configuration persist.
+
 ## 0.5.3 — fullscreen portrait CYD
 
 - Token-protected 240×320 /snapshot-cyd.jpg, pre-rotated 90° left on Raspberry Pi.

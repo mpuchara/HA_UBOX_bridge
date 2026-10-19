@@ -1,5 +1,5 @@
 name: UBox Bridge
-version: "0.5.3"
+version: "0.5.4"
 slug: ubox_bridge
 description: On-demand and periodic live snapshots for UBox LTE cameras, HA and ESP32 CYD
 url: https://github.com/mpuchara/HA_UBOX_bridge
@@ -27,6 +27,7 @@ options:
   device_password: ""
   interval_minutes: 15
   live_timeout_seconds: 45
+  stream_index: 0
   capture_on_start: false
 schema:
   account_email: str
@@ -35,4 +36,5 @@ schema:
   device_password: password
   interval_minutes: int(0,1440)
   live_timeout_seconds: int(10,75)
+  stream_index: int(0,1)
   capture_on_start: bool

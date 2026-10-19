@@ -26,6 +26,7 @@ LOG = logging.getLogger("ubox_bridge")
 DATA = Path(os.environ.get("UBOX_DATA_DIR", "/data"))
 OPTIONS = Path(os.environ.get("UBOX_OPTIONS_PATH", "/data/options.json"))
 FFMPEG = os.environ.get("UBOX_FFMPEG", "ffmpeg")
+FFPROBE = os.environ.get("UBOX_FFPROBE", "ffprobe")
 INGRESS_PORT = int(os.environ.get("UBOX_INGRESS_PORT", "8099"))
 SNAPSHOT_PORT = int(os.environ.get("UBOX_SNAPSHOT_PORT", "8100"))
 NODE_EXECUTABLE = os.environ.get("UBOX_NODE", "/usr/bin/node")
@@ -49,11 +50,14 @@ class CameraState:
         self.last_error = None
         self.live_diagnostics = None
         self.last_source = None
+        self.source_resolution = None
         meta_path = DATA / "last_metadata.json"
         try:
             metadata = json.loads(meta_path.read_text(encoding="utf-8"))
             if metadata.get("source") in ("cloud_recording", "p4p", "live_alt"):
                 self.last_source = metadata["source"]
+            if isinstance(metadata.get("source_resolution"), str):
+                self.source_resolution = metadata["source_resolution"]
         except (OSError, ValueError, AttributeError):
             pass
         self.last_attempt = None
@@ -179,6 +183,7 @@ class CameraState:
                 "last_error": self.last_error,
                 "live_diagnostics": self.live_diagnostics,
                 "last_image_source": self.last_source,
+                "source_resolution": self.source_resolution,
                 "has_image": self.image.is_file() and self.image.stat().st_size > 0,
                 "has_cyd_image": self.cyd_image.is_file() and self.cyd_image.stat().st_size > 0,
                 "interval_minutes": int(self.options.get("interval_minutes", 0)),
@@ -198,12 +203,15 @@ class CameraState:
         threading.Thread(target=self.capture_live_alt, daemon=True).start()
         return True, "Odbiór nowej klatki rozpoczęty."
 
-    def publish_metadata(self, source="live_alt"):
+    def publish_metadata(self, source="live_alt", source_resolution=None):
         tmp = DATA / "last_metadata.new"
-        tmp.write_text(json.dumps({"source": source}), encoding="utf-8")
+        tmp.write_text(json.dumps({
+            "source": source, "source_resolution": source_resolution
+        }), encoding="utf-8")
         os.replace(tmp, DATA / "last_metadata.json")
         with self.lock:
             self.last_source = source
+            self.source_resolution = source_resolution
             self.last_success = utc_now()
 
     def capture_live_alt(self):
@@ -223,6 +231,7 @@ class CameraState:
                     "UBOX_PASSWORD": password,
                     "UBOX_OUTPUT": str(raw),
                     "UBOX_WAIT_SECONDS": str(max(10, min(75, int(self.options.get("live_timeout_seconds", 45))))),
+                    "UBOX_STREAM_INDEX": str(max(0, min(1, int(self.options.get("stream_index", 0))))),
                 })
                 proc = subprocess.run(
                     [NODE_EXECUTABLE, str(LIVE_CAPTURE_SCRIPT)],
@@ -251,6 +260,7 @@ class CameraState:
                     phases = diag.get("stages") if isinstance(diag.get("stages"), dict) else {}
                     self.live_diagnostics = {
                         "backend": "ubox-web",
+                        "stream_index": max(0, min(1, int(self.options.get("stream_index", 0)))),
                         "relay_established": bool(diag.get("relay_established")),
                         "discovered_relay_count": min(100, int(diag.get("discovered_relay_count", 0))),
                         "codec": diag.get("codec") if diag.get("codec") in ("h264", "hevc") else None,
@@ -270,43 +280,80 @@ class CameraState:
                 codec = self.live_diagnostics.get("codec") if self.live_diagnostics else None
                 if codec not in ("h264","hevc"):
                     raise RuntimeError("Nowy klient odebrał dane, ale nie rozpoznał kodeka.")
-                # The first P4P relay frame may be corrupted. Extract several
-                # low-resolution RGB candidates, then select the one with the
-                # fewest green concealment areas / horizontal scanline artifacts.
-                candidate_pattern = str(Path(folder) / "candidate_%03d.ppm")
-                subprocess.run(
+                # Inspect the TRUE video resolution. Camera marketing resolution
+                # does not guarantee the P4P stream is delivered at 2K/HD.
+                source_resolution = None
+                try:
+                    probe = subprocess.run(
+                        [FFPROBE, "-v", "error", "-f", codec, "-i", str(raw),
+                         "-select_streams", "v:0", "-show_entries",
+                         "stream=width,height", "-of", "json"],
+                        capture_output=True, timeout=15, check=False,
+                    )
+                    streams = json.loads(probe.stdout.decode("utf-8")).get("streams", [])
+                    if streams:
+                        width, height = int(streams[0]["width"]), int(streams[0]["height"])
+                        if 0 < width <= 8192 and 0 < height <= 8192:
+                            source_resolution = f"{width}x{height}"
+                except (OSError, ValueError, IndexError, KeyError, subprocess.TimeoutExpired):
+                    pass
+                # A 320x240 image is used ONLY to score damage. Never convert
+                # it into the stored HA/CYD frame: that threw away HD details.
+                preview_pattern = str(Path(folder) / "candidate_%03d.ppm")
+                preview = subprocess.run(
                     [FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
                      "-threads", "2", "-f", codec, "-i", str(raw),
-                     "-vf", "fps=6,scale=320:240:force_original_aspect_ratio=increase,"
+                     "-vf", "fps=6,scale=320:240:force_original_aspect_ratio=increase:flags=lanczos,"
                             "crop=320:240",
-                     "-vsync", "0", "-frames:v", "18", candidate_pattern],
+                     "-vsync", "0", "-frames:v", "18", preview_pattern],
                     capture_output=True, timeout=45, check=False,
                 )
                 candidates = sorted(Path(folder).glob("candidate_*.ppm"))
                 if not candidates:
                     raise RuntimeError("Nie udało się odkodować poprawnej klatki ze strumienia UBox.")
                 best, metrics = select_cleanest(candidates)
+                frame_number = int(best.stem.rsplit("_", 1)[-1]) - 1
+                if not (0 <= frame_number < 18):
+                    raise RuntimeError("Nieprawidłowy numer klatki wideo.")
+                # Decode that same frame a SECOND time at original resolution,
+                # without an intermediate 320x240 bottleneck.
+                native = subprocess.run(
+                    [FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
+                     "-threads", "2", "-f", codec, "-i", str(raw),
+                     "-vf", f"fps=6,select=eq(n\\,{frame_number})",
+                     "-vsync", "0", "-frames:v", "1",
+                     "-pix_fmt", "yuvj420p", "-q:v", "2", str(jpeg)],
+                    capture_output=True, timeout=45, check=False,
+                )
+                if native.returncode or not jpeg.is_file() or not jpeg.stat().st_size:
+                    raise RuntimeError("Nie udało się zapisać wybranej klatki w natywnej rozdzielczości.")
+                # Lanczos downsamples directly from the HD master.
+                # Cover + crop preserves geometry while filling a 240x320 LCD.
+                portrait = Path(folder) / "frame_cyd.jpg"
+                resized = subprocess.run(
+                    [FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
+                     "-i", str(jpeg),
+                     "-vf", "scale=320:240:force_original_aspect_ratio=increase:flags=lanczos,"
+                            "crop=320:240,transpose=2",
+                     "-frames:v", "1", "-pix_fmt", "yuvj420p", "-q:v", "2", str(portrait)],
+                    capture_output=True, timeout=30, check=False,
+                )
+                if resized.returncode or not portrait.is_file() or not portrait.stat().st_size:
+                    raise RuntimeError("Nie udało się przeskalować natywnej klatki do 240x320.")
+                metrics["native_resolution"] = source_resolution
                 with self.lock:
                     if self.live_diagnostics is not None:
                         self.live_diagnostics["snapshot_quality"] = metrics
-                LOG.info("Snapshot selection: %d candidates, green %.3f, stripes %.3f",
-                         len(candidates), metrics["green_fraction"], metrics["stripe_score"])
-                # Two independent JPEGs: HA landscape and pre-rotated portrait CYD.
-                portrait = Path(folder) / "frame_cyd.jpg"
-                for output, vf in ((jpeg, None), (portrait, "transpose=2")):
-                    cmd = [FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
-                           "-i", str(best)]
-                    if vf:
-                        cmd += ["-vf", vf]
-                    cmd += ["-frames:v", "1", "-pix_fmt", "yuvj420p",
-                            "-q:v", "4", str(output)]
-                    ff = subprocess.run(cmd, capture_output=True, timeout=25, check=False)
-                    if ff.returncode or not output.is_file() or not output.stat().st_size:
-                        raise RuntimeError("FFmpeg nie przygotował JPEG dla HA/CYD.")
+                        self.live_diagnostics["source_resolution"] = source_resolution
+                LOG.info("Selected frame %d/%d, source=%s, green=%.3f, noise=%.3f",
+                         frame_number+1, len(candidates), source_resolution or "unknown",
+                         metrics["green_fraction"], metrics["noise_fraction"])
+                # Only publish fully rendered outputs; keep old images if a step fails.
                 os.replace(portrait, self.cyd_image)
                 os.replace(jpeg, self.image)
-            self.publish_metadata("live_alt")
-            LOG.info("Live stream snapshot saved (%d bytes)", self.image.stat().st_size)
+            self.publish_metadata("live_alt", source_resolution=source_resolution)
+            LOG.info("Live snapshot stored in original stream resolution (%s; %d B)",
+                     source_resolution or "unknown", self.image.stat().st_size)
         except subprocess.TimeoutExpired:
             self.fail("Alternatywny klient P4P przekroczył limit czasu.")
         except (RuntimeError, UBoxApiError, OSError, ValueError, TypeError) as exc:
@@ -327,7 +374,7 @@ STATE: CameraState | None = None
 
 
 class ApiHandler(BaseHTTPRequestHandler):
-    server_version = "UBoxBridge/0.5.3"
+    server_version = "UBoxBridge/0.5.4"
 
     def log_message(self, fmt, *args):
         # Never log URLs or query strings containing the snapshot token.
@@ -390,6 +437,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                 self.json_response(200, {
                     "has_image": status["has_image"],
                     "has_cyd_image": status["has_cyd_image"],
+                    "source_resolution": status["source_resolution"],
                     "last_success": status["last_success"],
                     "capturing": status["capturing"],
                     "interval_minutes": status["interval_minutes"],
@@ -470,7 +518,8 @@ code,pre{overflow-wrap:anywhere;white-space:pre-wrap;color:#a6eeac}
 CYD jedynie sprawdza zapisany JPEG — nie wybudza kamery.</small></p>
 <details><summary>Diagnostyka transmisji</summary>
 <pre id="diag"></pre></details></div>
-<div class="card"><h3>Ostatnia klatka</h3>
+<div class="card"><h3>Ostatnia klatka HA (rozdzielczość źródłowa)</h3>
+<p id="resolution" class="muted">Odczyt rozdzielczości po nowej klatce.</p>
 <img id="image" alt="Ostatnia klatka">
 <p id="stamp" class="muted">Brak obrazu</p></div>
 <div class="card"><h3>Podgląd CYD (240×320, obrót o 90° w lewo)</h3>
@@ -502,6 +551,7 @@ try{
  document.getElementById('devices').textContent=s.devices.map(d=>d.name+
  ' (…'+d.uid_suffix+')'+(d.has_device_password?' — dostępna':' — brak hasła P2P')).join(' | ');
  document.getElementById('stamp').textContent=s.last_success||'Brak zdjęcia';
+ document.getElementById('resolution').textContent='Źródłowy strumień: '+(s.source_resolution||'brak danych — pobierz nowe zdjęcie');
  document.getElementById('diag').textContent=JSON.stringify(s.live_diagnostics||{},null,2);
  document.getElementById('url').textContent='http://IP_HA:8100/snapshot-cyd.jpg?token='+encodeURIComponent(s.snapshot_token);
  if(s.has_image&&last!==s.last_success){last=s.last_success;document.getElementById('image').src='snapshot.jpg?t='+Date.now();if(s.has_cyd_image)document.getElementById('cydimage').src='snapshot-cyd.jpg?t='+Date.now()}

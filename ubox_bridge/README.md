@@ -43,3 +43,17 @@ The firmware v0.2.3+ downloads /snapshot-cyd.jpg (240×320, rotated 90° left).
 Existing /snapshot.jpg remains 320×240 for Generic Camera. Both use the
 same LAN token and support ETag/304; a new capture is needed after upgrade.
 The Ingress panel displays both previews. Cropping covers the entire CYD LCD.
+
+## High-resolution master v0.5.4
+
+`/snapshot.jpg` now stores the actual source frame resolution (e.g. 1920x1080 or
+2304x1296 **only if delivered by the camera**). Quality ranking still uses a
+small preview but that preview is never exported as the master. The JPEG served
+at `/snapshot-cyd.jpg` is 240×320 rotated 90° counterclockwise, downsampled
+using Lanczos from the HD master at quality 2. Full-screen crop will trim
+side content for non-4:3 images; it never distorts aspect ratio.
+
+The Ingress panel displays the *actual* source resolution after the next capture.
+If the resolution is low (e.g. 640×360), optionally try `stream_index: 1`
+with one manual capture and inspect the result; UBox channel mapping is
+firmware-dependent and could fail. Default `stream_index: 0` is unchanged.

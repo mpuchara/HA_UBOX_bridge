@@ -11,14 +11,14 @@ UBox XEGA XG-01-EU4G and other UBox cameras. The **working** live
 snapshot path was validated on the XEGA by the camera owner on
 2026-10-19. The add-on starts a live UBox session via the
 [asyrk/ubox-web](https://github.com/asyrk/ubox-web) dynamic-relay transport,
-captures a HEVC/H.264 frame and saves a JPEG 320×240.
+captures a HEVC/H.264 frame and stores a full-resolution JPEG from the actual P4P stream, plus a separate 240×320 JPEG for CYD.
 
 ## Install or upgrade
 
 Add this repository to the HAOS add-on store:
 `https://github.com/mpuchara/HA_UBOX_bridge`
 
-Install/upgrade **UBox Bridge** to v0.5.3. Existing UBox login options and
+Install/upgrade **UBox Bridge** to v0.5.4. Existing UBox login options and
 cached image are preserved. Change `interval_minutes` in the add-on
 configuration to **15** for a fresh snapshot every 15 minutes (or **0** to
 disable automatic capture); **existing installations keep the previous
@@ -63,3 +63,12 @@ UBox Bridge v0.5.3 generates a new 240×320 `/snapshot-cyd.jpg` (rotated
 is preserved. The CYD draws the JPEG directly without block rotation.
 Setup hotspot: `CYD`; an 8-character random uppercase WPA2 password is
 shown on its LCD. Download and flash the 0.2.3 installer from GitHub Releases.
+
+## Native-resolution screenshots (v0.5.4)
+
+HA `/snapshot.jpg` now stores the selected frame at source resolution.
+CYD `/snapshot-cyd.jpg` is generated from that master with Lanczos
+resampling to 240×320, 90° left rotation and center crop for full screen.
+The panel shows *actual* P4P stream resolution (not claimed 3 MP sensor
+resolution). If low, compare `stream_index: 0` and optional `1` — not all
+cameras support both. Existing CYD firmware v0.2.3 works unchanged.
