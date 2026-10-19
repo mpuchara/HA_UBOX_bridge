@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.7 — CYD source orientation and adjustable framing
+
+- Fix: no unwanted 90-degree camera rotation in /snapshot-cyd-wide.jpg; the frame is now aligned with the original Home Assistant snapshot.
+- New cyd_fit_mode values: blur (default, full field of view with soft background), cover (fill screen, crop edges), contain (full field of view and black margins).
+- cyd_focus_x 0-100 moves crop in cover mode. Center is 50.
+- Reframe cached high-resolution HA JPEG whenever the addon starts, so updating or changing framing does not require LTE camera capture.
+- Old camera_rotation value (including persisted 90) is ignored on the wide endpoint, to repair existing installations without manual migration.
+- Compatible with existing CYD 0.2.5 ST7789 / ILI9341 firmware; do not reflash ESP32.
+
 ## 0.5.6 — separate camera angle correction
 
 - Source video from this camera is sideways even when LCD UI uses landscape orientation.

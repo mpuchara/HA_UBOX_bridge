@@ -564,8 +564,14 @@ CYD jedynie sprawdza zapisany JPEG — nie wybudza kamery.</small></p>
 <img id="image" alt="Ostatnia klatka">
 <p id="stamp" class="muted">Brak obrazu</p></div>
 <div class="card"><h3>Podgląd CYD (320×240 — USB po prawej)</h3>
-<img id="wideimage" alt="Widok przygotowany dla CYD w poziomie">
-<p class="muted">Nowy firmware 0.2.4 pobiera tę wersję — bez obrotu JPEG na ESP32.</p></div>
+<img id="wideimage" alt="Zdjęcie CYD, bez obrotu kadru kamery">
+<p id="framing" class="muted">Kadr źródłowy bez dodatkowego obrotu.</p>
+<p class="muted">Sposób dopasowania możesz zmienić w konfiguracji dodatku:
+<code>cyd_fit_mode: blur</code> zachowuje cały kadr z rozmytymi pasami,
+<code>cover</code> wypełnia ekran kosztem przycięcia boków,
+<code>contain</code> zachowuje cały kadr z czarnymi pasami.
+Przy <code>cover</code> ustaw <code>cyd_focus_x</code> od 0 (lewa)
+do 100 (prawa). Zmiana nie wymaga nowego pobierania z LTE.</p></div>
 <div class="card"><h3>Starszy podgląd CYD (240×320)</h3>
 <img id="cydimage" alt="Starsza wersja pionowa"></div>
 <div class="card"><h3>CYD / sieć lokalna</h3>
@@ -597,6 +603,9 @@ try{
  document.getElementById('stamp').textContent=s.last_success||'Brak zdjęcia';
  document.getElementById('resolution').textContent='Źródłowy strumień: '+(s.source_resolution||'brak danych — pobierz nowe zdjęcie');
  document.getElementById('diag').textContent=JSON.stringify(s.live_diagnostics||{},null,2);
+ document.getElementById('framing').textContent='Kadr: '+s.cyd_fit_mode+
+    (s.cyd_fit_mode==='cover'?' · środek przycięcia '+s.cyd_focus_x+'%':'')+
+    ' · bez obrotu zdjęcia';
  document.getElementById('url').textContent='http://IP_HA:8100/snapshot-cyd-wide.jpg?token='+encodeURIComponent(s.snapshot_token);
  if(s.has_image&&last!==s.last_success){last=s.last_success;document.getElementById('image').src='snapshot.jpg?t='+Date.now();if(s.has_cyd_image)document.getElementById('cydimage').src='snapshot-cyd.jpg?t='+Date.now();if(s.has_cyd_wide_image)document.getElementById('wideimage').src='snapshot-cyd-wide.jpg?t='+Date.now()}
 }catch(e){document.getElementById('status').textContent='Nie można odczytać stanu dodatku.'}

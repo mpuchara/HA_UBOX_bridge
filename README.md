@@ -18,7 +18,7 @@ captures a HEVC/H.264 frame and stores a full-resolution JPEG from the actual P4
 Add this repository to the HAOS add-on store:
 `https://github.com/mpuchara/HA_UBOX_bridge`
 
-Install/upgrade **UBox Bridge** to v0.5.6. Existing UBox login options and
+Install/upgrade **UBox Bridge** to v0.5.7. Existing UBox login options and
 cached image are preserved. Change `interval_minutes` in the add-on
 configuration to **15** for a fresh snapshot every 15 minutes (or **0** to
 disable automatic capture); **existing installations keep the previous
@@ -97,3 +97,14 @@ The installer now includes two LCD drivers because two-USB CYD batches
 can differ. Try ST7789 first, then ILI9341 if the color self-test leaves
 stale regions. The firmware checks that every JPEG pixel tile was written,
 so incomplete JPEGs are never recorded as a successful display update.
+
+## Fixed source angle and field of view (0.5.7)
+
+The 320x240 CYD endpoint now retains the original camera angle, regardless of
+the previous camera_rotation: 90 setting. CYD firmware 0.2.5 is unchanged.
+Add-on configuration cyd_fit_mode accepts blur (default: full image with
+soft-filled background), cover (full LCD with cropped sides) or contain
+(full image with black margins). For cover, cyd_focus_x (0..100, default 50)
+moves the crop. HA native JPEG remains unchanged.
+Restarting the add-on regenerates the CYD JPEG from the cached HA master,
+without any LTE wake-up or data usage.

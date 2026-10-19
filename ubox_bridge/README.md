@@ -74,3 +74,21 @@ LCD rotation alone cannot straighten a camera mounted sideways. The
 with FFmpeg before Lanczos scaling; set `camera_rotation` to 0,90,180,270
 in addon configuration if needed (90 is the default). The native resolution
 still is saved unchanged for HA, and /snapshot-cyd.jpg stays portrait.
+
+## Wide CYD framing and orientation (0.5.7)
+
+The UBox frame already has the correct orientation in Home Assistant. For
+/snapshot-cyd-wide.jpg the earlier forced 90-degree transpose is removed,
+even if the old camera_rotation option still says 90. The LCD controller's
+hardware rotation stays in the CYD firmware, as before.
+
+New addon options:
+- cyd_fit_mode: blur — default; the entire 16:9 original remains visible
+  with softened top and bottom bands to fill the 4:3 TFT surface.
+- cyd_fit_mode: cover — all 320x240 pixels show real camera content, while
+  the sides are cropped. cyd_focus_x: 0..100 selects horizontal crop center.
+- cyd_fit_mode: contain — entire 16:9 scene with plain black bars.
+
+HA stores the source JPEG unchanged, as delivered (for example 640x360).
+On startup the addon re-creates the 320x240 JPEG from the HA cache without
+connecting to the camera. No new LTE usage or CYD firmware update.

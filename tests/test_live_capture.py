@@ -70,9 +70,35 @@ class LiveCaptureTests(unittest.TestCase):
                 wide_commands=[c for c in command_log if str(c[-1]).endswith("frame_cyd_wide.jpg")]
                 self.assertEqual(len(wide_commands),1)
                 self.assertIn("flags=lanczos",str(wide_commands[0]))
-                self.assertIn("transpose=2",str(wide_commands[0]))
-                self.assertLess(str(wide_commands[0]).index("transpose=2"),str(wide_commands[0]).index("scale=320"))
+                self.assertNotIn("transpose",str(wide_commands[0]))
+                self.assertIn("boxblur",str(wide_commands[0]))
                 self.assertFalse(st.busy)
+
+    def test_reframe_from_cached_master_no_camera_network(self):
+        with tempfile.TemporaryDirectory() as root:
+            base=Path(root)
+            (base/"options.json").write_text(json.dumps({
+                "uid":"ABCDEFGHIJKLMNOPQRST",
+                "device_password":"secret",
+                "camera_rotation":90,
+                "cyd_fit_mode":"cover",
+                "cyd_focus_x":80}))
+            (base/"last.jpg").write_bytes(b"original")
+            commands=[]
+            def run(cmd, **kwargs):
+                commands.append(cmd)
+                Path(cmd[-1]).write_bytes(b"wide-render")
+                return Process()
+            with patch.object(bridge,"DATA",base),patch.object(bridge,"OPTIONS",base/"options.json"), \
+                 patch.object(bridge.subprocess,"run",side_effect=run):
+                st=bridge.CameraState()
+                self.assertTrue(st.rebuild_cyd_wide_from_cache())
+                self.assertEqual((base/"last.jpg").read_bytes(),b"original")
+                self.assertEqual((base/"last_cyd_wide.jpg").read_bytes(),b"wide-render")
+                self.assertEqual(len(commands),1)
+                self.assertIn("(iw-ow)*80/100",str(commands[0]))
+                self.assertNotIn("transpose",str(commands[0]))
+                self.assertNotIn("node",str(commands[0]))
 
     def test_failed_session_keeps_previous_snapshot(self):
         with tempfile.TemporaryDirectory() as root:
