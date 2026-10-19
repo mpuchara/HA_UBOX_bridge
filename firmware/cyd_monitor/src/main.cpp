@@ -10,7 +10,7 @@
 #include <memory>
 #include <new>
 
-// CYD ESP32-2432S028 (ILI9341, 2.8", 320x240).
+// CYD ESP32-2432S028 (ILI9341, 2.8", 240x320 portrait).
 // Configuration is stored in ESP32 NVS, NEVER compiled into the firmware.
 static constexpr int TFT_BACKLIGHT_PIN = 21;
 static constexpr int BOOT_BUTTON_PIN = 0;
@@ -26,35 +26,20 @@ unsigned long lastReconnect = 0;
 unsigned long bootHeldFrom = 0;
 bool buttonResetTriggered = false;
 
-// The HA add-on sends 320x240 JPEG. Turn the pixels 90 degrees LEFT
-// into the CYD's native 240x320 portrait orientation.
-// A single JPEG MCU is <=16x16, so only a small scratch buffer is needed.
-// Unlike a full-frame rotation this works on a classic ESP32 without PSRAM.
-static constexpr uint16_t JPEG_WIDTH = 320;
-static constexpr uint16_t JPEG_HEIGHT = 240;
-static uint16_t rotatedBlock[16 * 16];
+// HA add-on v0.5.3+ supplies a 240x320 JPEG already rotated 90 degrees LEFT.
+// Draw MCU blocks directly; the old MCU rotation caused visible seams.
+static constexpr uint16_t JPEG_WIDTH = 240;
+static constexpr uint16_t JPEG_HEIGHT = 320;
 static bool jpegGeometryError = false;
 
 bool tftBlock(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* colors) {
   if (!colors || x < 0 || y < 0 || !w || !h ||
-      static_cast<uint32_t>(w) * h > 16 * 16 ||
-      static_cast<uint32_t>(x) + w > JPEG_WIDTH ||
-      static_cast<uint32_t>(y) + h > JPEG_HEIGHT) {
+      static_cast<uint32_t>(x) + w > tft.width() ||
+      static_cast<uint32_t>(y) + h > tft.height()) {
     jpegGeometryError = true;
     return false;
   }
-
-  // Original pixel (x+i, y+j) -> (y+j, 319-(x+i)).
-  // The rotated JPEG occupies the full 240x320 ILI9341 panel.
-  const int16_t dstX = y;
-  const int16_t dstY = JPEG_WIDTH - x - w;
-  for (uint16_t j = 0; j < h; ++j) {
-    for (uint16_t i = 0; i < w; ++i) {
-      rotatedBlock[static_cast<size_t>(w - 1 - i) * h + j] =
-          colors[static_cast<size_t>(j) * w + i];
-    }
-  }
-  tft.pushImage(dstX, dstY, h, w, rotatedBlock);
+  tft.pushImage(x, y, w, h, colors);
   return true;
 }
 
@@ -92,7 +77,7 @@ void persistSettings(const String& host, const String& token) {
 void configPortalScreen(const String& apName, const String& apPassword) {
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.drawString("UBox CYD - konfiguracja", 8, 8, 2);
+  tft.drawString("CYD - konfiguracja", 8, 8, 2);
   writeScreenLine("1. Polacz sie z Wi-Fi:", 8+34);
   writeScreenLine(apName, 10+60, TFT_CYAN);
   writeScreenLine("Haslo:", 10+94);
@@ -117,13 +102,15 @@ bool configureNetworking(bool forcePortal) {
   wifiManager.setConfigPortalTimeout(0); // Wait until user finishes provisioning.
   wifiManager.setTitle("UBox CYD - ustawienia");
 
-  // Random WPA2 AP password is shown only on the physical display.
-  const uint32_t nonce = esp_random();
-  char nonceHex[9];
-  snprintf(nonceHex, sizeof(nonceHex), "%08lx", static_cast<unsigned long>(nonce));
-  const String apName = "UBox-CYD-" + String(nonceHex).substring(4);
-  const String apPassword = "ucyd" + String(nonceHex) + "!";
-  // Always 13 chars; WPA2 requires at least 8.
+  // Easy setup: SSID "CYD" and exactly 8 random, unambiguous characters.
+  // Password is shown on the physical screen, never compiled into firmware.
+  const String apName = "CYD";
+  constexpr char ALPHABET[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  String apPassword;
+  apPassword.reserve(9);
+  for (uint8_t i = 0; i < 8; ++i) {
+    apPassword += ALPHABET[esp_random() % (sizeof(ALPHABET) - 1)];
+  }
   wifiManager.setAPCallback([&](WiFiManager*) {
     configPortalScreen(apName, apPassword);
   });
@@ -189,7 +176,7 @@ void pollImage() {
   }
   WiFiClient client;
   HTTPClient http;
-  const String url = "http://" + haHost + ":8100/snapshot.jpg";
+  const String url = "http://" + haHost + ":8100/snapshot-cyd.jpg";
   if (!http.begin(client, url)) {
     showMessage("Blad polaczenia HA", TFT_RED);
     return;
@@ -246,13 +233,14 @@ void pollImage() {
     return;
   }
   jpegGeometryError = false;
-  // Keep the SPI bus in one transaction for all JPEG MCU writes.
+  // Fullscreen redraw so stale pixels from earlier frames never remain.
+  tft.fillScreen(TFT_BLACK);
   tft.startWrite();
   const JRESULT result = TJpgDec.drawJpg(0, 0, bytes.get(), static_cast<uint32_t>(received));
   tft.endWrite();
   if (result == JDR_OK && !jpegGeometryError) {
     lastEtag = etag;
-    Serial.printf("New JPEG: %u bytes; drawn 240x320 left rotation\n",
+    Serial.printf("New portrait JPEG: %u bytes; directly drawn at 240x320\n",
                   static_cast<unsigned>(received));
   } else {
     Serial.printf("JPEG error: %d (geometry %d)\n",
@@ -268,7 +256,7 @@ void setup() {
   pinMode(TFT_BACKLIGHT_PIN, OUTPUT);
   digitalWrite(TFT_BACKLIGHT_PIN, HIGH);
   tft.init();
-  tft.setRotation(0); // 240x320 portrait; JPEG rotates 90 degrees left in tftBlock()
+  tft.setRotation(0); // 240x320 portrait, already rotated by the HA add-on
   tft.fillScreen(TFT_BLACK);
   TJpgDec.setJpgScale(1);
   TJpgDec.setSwapBytes(true);

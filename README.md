@@ -18,7 +18,7 @@ captures a HEVC/H.264 frame and saves a JPEG 320×240.
 Add this repository to the HAOS add-on store:
 `https://github.com/mpuchara/HA_UBOX_bridge`
 
-Install/upgrade **UBox Bridge** to v0.5.2. Existing UBox login options and
+Install/upgrade **UBox Bridge** to v0.5.3. Existing UBox login options and
 cached image are preserved. Change `interval_minutes` in the add-on
 configuration to **15** for a fresh snapshot every 15 minutes (or **0** to
 disable automatic capture); **existing installations keep the previous
@@ -28,7 +28,7 @@ an immediate new photo when the service boots.
 
 The HA Ingress panel provides a manual capture button and a JPEG endpoint
 for a CYD TFT display (token-protected, port 8100). A CYD may request
-`GET /snapshot.jpg` every 30 seconds with `X-UBox-Token: TOKEN` and
+`GET /snapshot-cyd.jpg` every 30 seconds with `X-UBox-Token: TOKEN` and
 `If-None-Match: "etag-from-last-200"`. The server returns
 `200 image/jpeg` only when a new photo has been saved and
 `304 Not Modified` for unchanged photos. It never initiates P2P from
@@ -55,3 +55,11 @@ Ingress UI is HA-authenticated; LAN port 8100 only serves token-guarded
 images and metadata, not remote camera-control commands. Do not forward
 port 8100 to the internet. If your JPEG token has appeared in a screenshot,
 use **Wygeneruj nowy token** in the Ingress panel to revoke it.
+
+## CYD firmware v0.2.3 (portrait)
+
+UBox Bridge v0.5.3 generates a new 240×320 `/snapshot-cyd.jpg` (rotated
+90° LEFT, cover-cropped, no letterbox). Original 320×240 `/snapshot.jpg`
+is preserved. The CYD draws the JPEG directly without block rotation.
+Setup hotspot: `CYD`; an 8-character random uppercase WPA2 password is
+shown on its LCD. Download and flash the 0.2.3 installer from GitHub Releases.

@@ -35,3 +35,14 @@ Jeżeli poziome pasy pozostają, otwórz ostatni obraz w panelu UBox Bridge na t
 Od firmware CYD v0.2.2 transmisja SPI do ILI9341 działa z prędkością 20 MHz
 (zamiast 27 MHz). Obrót JPEG o 90° w lewo i pełne 240×320 zostały
 wprowadzone w v0.2.1. Obraz w HA pozostaje w poziomie 320×240.
+
+## Firmware 0.2.3 — pełny ekran
+
+UBox Bridge v0.5.3+ obraca obraz 90° w lewo i udostępnia już gotowy JPEG
+240×320 pod `/snapshot-cyd.jpg`. CYD rysuje go bez kolejnego obrotu.
+Aby obraz zajął cały ekran, wejście jest centralnie przycinane do proporcji 4:3.
+Nazwa hotspotu konfiguracyjnego: **CYD**. Hasło: **8 losowych czytelnych znaków**,
+pokazane na ekranie (bez mylących liter I/O i cyfr 0/1). Hasło jest
+jednorazowe dla sesji konfiguracyjnej i zabezpiecza hotspot WPA2.
+Najpierw zaktualizuj dodatek do 0.5.3 i naciśnij 'Zrób nowe zdjęcie',
+a dopiero później aktualizuj firmware CYD.

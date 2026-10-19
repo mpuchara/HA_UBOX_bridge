@@ -50,3 +50,10 @@ testowany na fizycznej płytce tego użytkownika.
 ## Orientacja i pasy obrazu
 
 Od wersji CYD 0.2.1 obraz 320×240 z HA jest obracany w ESP32 o 90° w lewo i rysowany jako 240×320 na pionowo ustawionym panelu. Taktowanie SPI wyświetlacza obniżono do 27 MHz, a transfer JPEG jest wykonywany jako jedna transakcja. Jeżeli pasy widać także w przeglądarce w panelu dodatku HA, ich przyczyną jest źródłowy strumień UBox, a nie sterownik CYD.
+
+## Firmware 0.2.3 — nowy sposób renderowania
+
+Zaktualizuj UBox Bridge do 0.5.3, zrób nowe zdjęcie. Wgraj CYD 0.2.3.
+Wyszukaj sieć Wi-Fi **CYD** i wpisz ośmioznakowe losowe hasło z LCD.
+Panel konfiguracji: `http://192.168.4.1`. Dane sieci domowej i token HA
+zapisują się w NVS, o ile przy flashowaniu nie wybrano kasowania pamięci.
