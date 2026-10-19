@@ -7,3 +7,6 @@ release/
 snapshot_token
 options.json
 last.jpg
+
+# CYD device secrets
+firmware/cyd_monitor/include/config.h

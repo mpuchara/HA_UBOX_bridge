@@ -1,54 +1,41 @@
-# UBox Bridge — setup and troubleshooting
+# UBox Bridge — Home Assistant OS / CYD
 
-1. Add this GitHub repository to the Home Assistant app store and install **UBox Bridge**.
-2. Enter the UBox **account email and password** in the Configuration tab. A single camera is selected automatically; for multiple cameras also specify UID. Alternatively use a manual UID and P2P device password.
-3. Start the add-on; in the Home Assistant sidebar open UBox Bridge. The add-on checks your account automatically. Use "Wykryj kamery UBox" to retry and then click the capture button.
-4. When a JPEG is available, copy the LAN URL from the panel and replace IP_HA with the local IP of your Raspberry Pi.
-5. Add a Generic Camera in Home Assistant with that still image URL, or configure the CYD to download it.
+The XEGA XG-01-EU4G was able to deliver HEVC live video with
+the asyrk/ubox-web P4P transport (one tested capture: 17 video frames,
+218581 bytes raw and 20129-byte 320×240 JPEG).
 
-Camera compatibility is not confirmed. Failure may mean the device sleeps, credentials are wrong, or this model has a different P4P variant. Keep automatic polling disabled during initial testing.
+## Scheduling
 
-Ingress dashboard listens internally on 8099 and accepts only the HA Supervisor proxy (172.30.32.2). Port 8100 provides only authenticated snapshot reads plus /health. Never expose 8100 on a public router or publish credentials.
+The HA add-on takes a new photo every `interval_minutes` (0=disabled).
+Scheduling starts when the add-on starts; first scheduled capture occurs
+after that interval. Set `capture_on_start: true` for an immediate capture
+after boot. Captures do not overlap. A failed capture leaves the last
+working JPEG intact, with a visible error and success timestamp.
 
-## Troubleshooting P4P on XEGA XG-01-EU4G
+The CYD should request the last cached JPEG every 30s via local
+Wi-Fi. It **does not** trigger the camera, saving data and battery.
+The endpoint returns ETag and HTTP 304 for unchanged photos.
+Metadata is available from `/snapshot-meta.json` (token required).
 
-The user's 2026-10-19 HA OS test received only UBox relay packet type
-`0x00421202` (68 bytes) during both wake and stream setup.
-No camera knock `0x0012130e`, camera info `0x0012130c` or
-stream acknowledgement was observed. This does not prove that the
-camera is asleep. Upstream P4P relay code is not confirmed compatible
-with this LTE firmware, and increasing retries is unlikely to help.
+## Authentication
 
-Try the separate **cloud archival thumbnail** button. If it reports
-zero events, UBox is not returning recorded cloud thumbnails over
-the selected lookback period. Alarm/recording settings and UBox cloud
-subscription can affect this; do not change recording settings without
-considering battery consumption, bandwidth and privacy.
+Port 8099 is Ingress only (HA Supervisor proxy). Port 8100 has a
+GET-only JPEG endpoint and a GET-only metadata endpoint, both guarded
+by a per-install token (in header or query). The token can be rotated
+from the Ingress panel. Never expose the port on a WAN router.
+The UBox account password remains in HA add-on local options. Do not
+commit or screenshot passwords or the token.
 
-The cloud mode returns *historical thumbnails only*, never a true
-on-demand camera screenshot or streaming video. It does not activate
-the camera or change its firmware.
+## Firmware
 
-## Live snapshot in v0.4.0 (experimental)
+The PlatformIO project in `firmware/cyd_monitor` uses the TFT_eSPI
+and TJpg_Decoder libraries. Board ESP32-2432S028 versions can have
+different TFT/backlight pins, so check the board revision if the
+display remains blank. Use the UBox Bridge panel to generate a new
+token if an old URL has been shared.
 
-Tap **Zrób zdjęcie (nowy klient UBox)**. Unlike the old P4P backend,
-this executes a separate, proven-by-upstream, dynamic relay discovery and
-native-style start-video process from asyrk/ubox-web. It then extracts an
-H.264/HEVC keyframe with FFmpeg and caches a JPEG (320×240). It uses
-already-resolved camera UID and P2P device password from the account API.
-No smartphone bridge or cloud archive is required.
+## Source
 
-The standalone Node runner is time-limited (default: 45 s) and only exposes
-allowlisted, numeric progress counters. The upstream session logs and video
-dump files are disabled. Its author describes the project as unreviewed
-vibe-coded experimental software; do not install on critical systems without
-reviewing upstream source and dependencies.
-
-`relay_established` is the transport flag, `counters.h264Frames`
-represents decoded video frames, and `stages.p4p-query-rsp` means the
-dynamic master query worked. A no-frame failure does not prove that
-the camera cannot take photos; it indicates that this unaffiliated P4P
-client did not obtain a video frame from this camera during that attempt.
-
-The cloud archive button remains available, but it cannot initiate a new
-photo, and zero archive events do not imply that the camera is offline.
+UBox live bridge comes from the pinned asyrk/ubox-web 2026-09-10
+commit. Upstream's author says the implementation is experimental and
+not fully security-audited.

@@ -1,17 +1,51 @@
 # HA UBox Bridge
 
-Experimental Home Assistant OS add-on repository for solar / LTE cameras using UBox P4P. For Raspberry Pi 4 64-bit (aarch64). It includes an authenticated Home Assistant Ingress dashboard and a token-protected JPEG snapshot endpoint for CYD ESP32 / Generic Camera.
+Home Assistant OS app (Raspberry Pi 4 ARM64 / amd64) for the LTE/solar
+UBox XEGA XG-01-EU4G and other UBox cameras. The **working** live
+snapshot path was validated on the XEGA by the camera owner on
+2026-10-19. The add-on starts a live UBox session via the
+[asyrk/ubox-web](https://github.com/asyrk/ubox-web) dynamic-relay transport,
+captures a HEVC/H.264 frame and saves a JPEG 320×240.
 
-## Install (recommended)
+## Install or upgrade
 
-In Home Assistant: Settings → Apps → Install app → ⋮ → Repositories; add https://github.com/mpuchara/HA_UBOX_bridge. Refresh the store, install **UBox Bridge**, enter your UBox account email and password (or UID and device password), and open the app panel to capture a first image.
+Add this repository to the HAOS add-on store:
+`https://github.com/mpuchara/HA_UBOX_bridge`
 
-## Release packages
+Install/upgrade **UBox Bridge** to v0.5.0. Existing UBox login options and
+cached image are preserved. Change `interval_minutes` in the add-on
+configuration to **15** for a fresh snapshot every 15 minutes (or **0** to
+disable automatic capture); **existing installations keep the previous
+value, often 0, unless you explicitly change it**. Reload/restart the
+add-on after changing options. Use `capture_on_start: true` if you want
+an immediate new photo when the service boots.
 
-GitHub Actions and scripts/package.py build HA-UBOX-Bridge-0.4.0-repository.zip (full repository with ubox_bridge/), HA-UBOX-Bridge-0.4.0-addon-root.zip (config.yaml at ZIP root), HA-UBOX-Bridge-0.4.0-complete.zip (both archives and SHA256SUMS.txt). For a manual install place addon-root files directly in /addons/ubox_bridge/ and refresh the app store. Do not remove /data during updates.
+The HA Ingress panel provides a manual capture button and a JPEG endpoint
+for a CYD TFT display (token-protected, port 8100). A CYD may request
+`GET /snapshot.jpg` every 30 seconds with `X-UBox-Token: TOKEN` and
+`If-None-Match: "etag-from-last-200"`. The server returns
+`200 image/jpeg` only when a new photo has been saved and
+`304 Not Modified` for unchanged photos. It never initiates P2P from
+these GET requests. To check freshness, `GET /snapshot-meta.json`
+with the same token.
 
-## Compatibility
+## CYD firmware
 
-XEGA XG-01-EU4G from Allegro listing 14135385412; still unverified on actual hardware. The upstream UBox P4P client is pinned to a public Git commit. v0.4.0 also includes an experimental independent live capture via asyrk/ubox-web; v0.3.0 supports manual download of the latest *historical* UBox cloud recording thumbnail (if cloud events are available); this is not live video. This add-on does not provide continuous RTSP or ONVIF. Snapshot captures are manual by default to avoid draining a solar camera.
+See [firmware/cyd_monitor](firmware/cyd_monitor/README.md) for a PlatformIO
+project for ESP32-2432S028 / 320×240 ILI9341 CYD.
+Build requires Wi-Fi credentials and the LAN token; they must not
+be committed to Git.
 
-Panel authentication is provided by Home Assistant Ingress. Port 8100 exposes a token-protected still image for CYD. Keep port 8100 LAN-only and do not share snapshot URLs, device passwords, or UIDs publicly.
+## Battery, privacy, and security
+
+At 15 minutes, a solar 4G camera is awakened 96 times per day. Start
+conservatively (e.g. 30–60 minutes), monitor battery and SIM data use,
+then shorten interval only if needed. Polling the cached JPEG from CYD
+does not use the camera's SIM allowance.
+
+The Node P4P library is experimental and is pinned to a tested commit;
+its upstream author warns that it has not been comprehensively audited.
+Ingress UI is HA-authenticated; LAN port 8100 only serves token-guarded
+images and metadata, not remote camera-control commands. Do not forward
+port 8100 to the internet. If your JPEG token has appeared in a screenshot,
+use **Wygeneruj nowy token** in the Ingress panel to revoke it.
