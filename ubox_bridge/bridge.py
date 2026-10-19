@@ -7,9 +7,8 @@ CYD snapshot interface: TCP 8100, token-protected, LAN port (never forward publi
 from __future__ import annotations
 
 import hmac
-from cloud_api import UBoxApiError, discover_devices, get_cloud_snapshot
+from cloud_api import UBoxApiError, discover_devices
 import json
-import re
 import logging
 import os
 import secrets
@@ -25,63 +24,11 @@ from urllib.parse import parse_qs, urlsplit
 LOG = logging.getLogger("ubox_bridge")
 DATA = Path(os.environ.get("UBOX_DATA_DIR", "/data"))
 OPTIONS = Path(os.environ.get("UBOX_OPTIONS_PATH", "/data/options.json"))
-DRIVER = Path(os.environ.get("UBOX_DRIVER_DIR", "/opt/ubox-p4p"))
-PYTHON = os.environ.get("UBOX_PYTHON", "/opt/ubox-venv/bin/python")
 FFMPEG = os.environ.get("UBOX_FFMPEG", "ffmpeg")
 INGRESS_PORT = int(os.environ.get("UBOX_INGRESS_PORT", "8099"))
 SNAPSHOT_PORT = int(os.environ.get("UBOX_SNAPSHOT_PORT", "8100"))
-CAPTURE_TIMEOUT = 150
 NODE_EXECUTABLE = os.environ.get("UBOX_NODE", "/usr/bin/node")
 LIVE_CAPTURE_SCRIPT = Path(os.environ.get("UBOX_LIVE_SCRIPT", "/app/capture_live.js"))
-
-def parse_driver_summary(stderr, stdout, code, size):
-    """Summarize P4P progress using allowlisted integers, codes and lengths.
-
-    NEVER expose raw upstream output: it may include UIDs, public/private IPs,
-    endpoint ports, session tags, and potentially device authentication.
-    Wake 'replies' in upstream output are ANY UDP packet, not camera ACKs.
-    """
-    from collections import Counter
-
-    raw = (stderr + b"\n" + stdout)[-1048576:].decode("utf-8", "replace")
-    packet_counts = {"wake": Counter(), "stage2": Counter()}
-    for phase, length, msg_type in re.findall(
-        r"\[relay\]\s+(wake-phase|stage2) pkt\s+(\d+)B\s+msg=0x([0-9a-fA-F]{8})\b",
-        raw,
-    ):
-        if int(length) > 65535:
-            continue
-        section = "wake" if phase == "wake-phase" else "stage2"
-        packet_counts[section][("0x" + msg_type.lower(), int(length))] += 1
-
-    def histogram(counter):
-        # Sorted and bounded. No raw packet payloads, addresses or identifiers.
-        return [
-            {"msg_type": msg_type, "bytes": length, "count": count}
-            for (msg_type, length), count in sorted(
-                counter.items(), key=lambda pair: (-pair[1], pair[0])
-            )[:16]
-        ]
-
-    return {
-        "return_code": int(code),
-        "hevc_bytes": int(size),
-        "wake_packets": int((re.findall(r"wake burst:\s*(\d+) knocks", raw) or ["0"])[-1]),
-        "wake_replies": len(re.findall("wake-phase pkt", raw)),
-        "stage2_packets": len(re.findall("stage2 pkt", raw)),
-        "relay_accepted": len(re.findall("got rlystreamrsp", raw)),
-        "no_video_retries": len(re.findall(r"attempt \d+/\d+: no video", raw)),
-        "python_errors": len(re.findall("Traceback|ModuleNotFoundError|ImportError", raw)),
-        "wake_message_types": histogram(packet_counts["wake"]),
-        "stage2_message_types": histogram(packet_counts["stage2"]),
-        "camera_knock_packets_seen": sum(count for (msg, _), count in (
-            packet_counts["wake"] + packet_counts["stage2"]
-        ).items() if msg == "0x0012130e"),
-        "camera_info_packets_seen": sum(count for (msg, _), count in (
-            packet_counts["wake"] + packet_counts["stage2"]
-        ).items() if msg == "0x0012130c"),
-    }
-
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -98,17 +45,13 @@ class CameraState:
         self.discovery_at = 0
         self.discovery_error = None
         self.last_error = None
-        self.last_diagnostics = None
-        self.cloud_diagnostics = None
         self.live_diagnostics = None
         self.last_source = None
-        self.last_event_utc = None
         meta_path = DATA / "last_metadata.json"
         try:
             metadata = json.loads(meta_path.read_text(encoding="utf-8"))
             if metadata.get("source") in ("cloud_recording", "p4p", "live_alt"):
                 self.last_source = metadata["source"]
-                self.last_event_utc = metadata.get("event_utc")
         except (OSError, ValueError, AttributeError):
             pass
         self.last_attempt = None
@@ -232,46 +175,32 @@ class CameraState:
                 "last_attempt": self.last_attempt,
                 "last_success": self.last_success,
                 "last_error": self.last_error,
-                "diagnostics": self.last_diagnostics,
-                "cloud_diagnostics": self.cloud_diagnostics,
                 "live_diagnostics": self.live_diagnostics,
                 "last_image_source": self.last_source,
-                "last_cloud_event_utc": self.last_event_utc,
                 "has_image": self.image.is_file() and self.image.stat().st_size > 0,
                 "interval_minutes": int(self.options.get("interval_minutes", 0)),
             }
 
-    def trigger(self, mode="p4p") -> tuple[bool, str]:
-        if mode == "cloud" and not self.account_configured:
-            return False, "Miniatury chmury wymagają konta UBox."
+    def trigger(self) -> tuple[bool, str]:
+        """Start at most one live capture even with a concurrent scheduler."""
         if not self.configured:
             return False, "Skonfiguruj konto UBox albo UID i hasło P2P."
-        if mode not in ("p4p", "cloud", "live_alt"):
-            return False, "Nieznany tryb."
         with self.lock:
             if self.busy:
                 return False, "Pobieranie już trwa."
             self.busy = True
             self.last_error = None
-            self.last_diagnostics = None
-            self.cloud_diagnostics = None
             self.live_diagnostics = None
             self.last_attempt = utc_now()
-        workers = {"cloud": self.capture_cloud, "p4p": self.capture, "live_alt": self.capture_live_alt}
-        worker = workers[mode]
-        threading.Thread(target=worker, daemon=True).start()
-        return True, "Próba pobrania obrazu rozpoczęta."
+        threading.Thread(target=self.capture_live_alt, daemon=True).start()
+        return True, "Odbiór nowej klatki rozpoczęty."
 
-    def publish_metadata(self, source, event_utc=None):
-        if source not in ("p4p", "cloud_recording", "live_alt"):
-            raise ValueError("Invalid image source")
-        payload = {"source": source, "event_utc": event_utc}
+    def publish_metadata(self, source="live_alt"):
         tmp = DATA / "last_metadata.new"
-        tmp.write_text(json.dumps(payload), encoding="utf-8")
+        tmp.write_text(json.dumps({"source": source}), encoding="utf-8")
         os.replace(tmp, DATA / "last_metadata.json")
         with self.lock:
             self.last_source = source
-            self.last_event_utc = event_utc
             self.last_success = utc_now()
 
     def capture_live_alt(self):
@@ -361,99 +290,6 @@ class CameraState:
             with self.lock:
                 self.busy = False
 
-    def capture_cloud(self):
-        try:
-            uid, _ = self.resolve_camera()
-            days = max(1, min(30, int(self.options.get("cloud_lookback_days", 7))))
-            jpeg_data, summary = get_cloud_snapshot(
-                self.options["account_email"],
-                self.options["account_password"],
-                uid,
-                lookback_days=days,
-            )
-            with self.lock:
-                self.cloud_diagnostics = summary
-            LOG.info("Cloud snapshot scan: events=%d thumbnails=%d", summary["event_count"], summary["events_with_thumbnail"])
-            if not jpeg_data:
-                raise RuntimeError("W chmurze UBox nie znaleziono miniatur nagrań z tego okresu. To nie jest podgląd na żywo.")
-            with tempfile.TemporaryDirectory(prefix="cloud-", dir=DATA) as folder:
-                source = Path(folder) / "original.jpg"
-                target = Path(folder) / "converted.jpg"
-                source.write_bytes(jpeg_data)
-                proc = subprocess.run(
-                    [FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
-                     "-i", str(source),
-                     "-vf", "scale=320:240:force_original_aspect_ratio=decrease,"
-                            "pad=320:240:(ow-iw)/2:(oh-ih)/2",
-                     "-frames:v", "1", "-q:v", "3", str(target)],
-                    capture_output=True, timeout=30, check=False
-                )
-                if proc.returncode or not target.is_file() or target.stat().st_size == 0:
-                    raise RuntimeError("Nie udało się przeskalować miniatury nagrania.")
-                os.replace(target, self.image)
-            self.publish_metadata("cloud_recording", summary.get("event_utc"))
-            LOG.info("Cloud recording thumbnail ready (%d bytes)", self.image.stat().st_size)
-        except subprocess.TimeoutExpired:
-            self.fail("Timeout podczas przetwarzania miniatury chmury.")
-        except (UBoxApiError, RuntimeError, OSError, ValueError) as exc:
-            self.fail(str(exc))
-        except Exception:
-            self.fail("Nieoczekiwany błąd pobierania miniatury chmury.")
-        finally:
-            with self.lock:
-                self.busy = False
-
-    def capture(self):
-        attempts = min(8, max(1, int(self.options.get("attempts", 3))))
-        try:
-            uid, password = self.resolve_camera()
-            with tempfile.TemporaryDirectory(prefix="capture-", dir=DATA) as folder:
-                raw = Path(folder) / "capture.h265"
-                jpeg = Path(folder) / "capture.jpg"
-                env = os.environ.copy()
-                env["UBOX_UID"] = uid
-                env["UBOX_PASSWORD"] = password
-                proc = subprocess.run(
-                    [PYTHON, str(DRIVER / "grab_clip.py"), "--tries", str(attempts),
-                     "--output", str(raw)],
-                    cwd=DRIVER, env=env, capture_output=True, timeout=CAPTURE_TIMEOUT,
-                    check=False,
-                )
-                # Do not log raw driver output: it contains private IPs and session metadata.
-                size = raw.stat().st_size if raw.is_file() else 0
-                summary = parse_driver_summary(proc.stderr, proc.stdout, proc.returncode, size)
-                with self.lock:
-                    self.last_diagnostics = summary
-                LOG.info("Sanitized P4P summary: %s", json.dumps(summary))
-                if proc.returncode or not size:
-                    cause = ("Błąd sterownika" if summary["python_errors"] else
-                             "Relay nie potwierdził transmisji" if not summary["relay_accepted"]
-                             else "Relay odpowiedział, ale nie dostarczył klatek")
-                    raise RuntimeError("P4P: " + cause)
-                ff = subprocess.run(
-                    [FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
-                     "-f", "hevc", "-i", str(raw),
-                     "-vf", r"select=eq(pict_type\,I),scale=320:240:force_original_aspect_ratio=decrease,"
-                            "pad=320:240:(ow-iw)/2:(oh-ih)/2",
-                     "-frames:v", "1", "-q:v", "3", str(jpeg)],
-                    capture_output=True, timeout=30, check=False,
-                )
-                if ff.returncode or not jpeg.exists() or not jpeg.stat().st_size:
-                    raise RuntimeError("Odebrano HEVC, ale FFmpeg nie utworzył JPEG.")
-                os.replace(jpeg, self.image)
-                self.publish_metadata("p4p")
-                LOG.info("Snapshot ready (%s bytes)", self.image.stat().st_size)
-        except subprocess.TimeoutExpired:
-            self.fail("Upłynął limit czasu odpowiedzi kamerki.")
-        except (RuntimeError, OSError, ValueError, UBoxApiError) as exc:
-            self.fail(str(exc))
-        except Exception:
-            # Unexpected exception may carry upstream identifiers; never log traceback.
-            self.fail("Nieoczekiwany błąd pobierania.")
-        finally:
-            with self.lock:
-                self.busy = False
-
     def fail(self, message: str):
         with self.lock:
             self.last_error = message
@@ -464,7 +300,7 @@ STATE: CameraState | None = None
 
 
 class ApiHandler(BaseHTTPRequestHandler):
-    server_version = "UBoxBridge/0.4.0"
+    server_version = "UBoxBridge/0.5.0"
 
     def log_message(self, fmt, *args):
         # Never log URLs or query strings containing the snapshot token.
@@ -486,118 +322,165 @@ class ApiHandler(BaseHTTPRequestHandler):
         self.respond(code, json.dumps(data, ensure_ascii=False).encode("utf-8"),
                      "application/json; charset=utf-8")
 
+    def allowed_ingress(self):
+        return (self.server.server_port == INGRESS_PORT
+                and (self.client_address[0] == "172.30.32.2"
+                     or os.environ.get("UBOX_TEST_INGRESS") == "1"))
+
+    def valid_token(self):
+        assert STATE is not None
+        query = parse_qs(urlsplit(self.path).query)
+        candidate = self.headers.get("X-UBox-Token") or (query.get("token") or [""])[0]
+        return hmac.compare_digest(candidate, STATE.token)
+
     def do_GET(self):
         assert STATE is not None
-        path = urlsplit(self.path).path
+        route = urlsplit(self.path).path
         if self.server.server_port == INGRESS_PORT:
-            # HA Supervisor ingress reverse proxy is the ONLY allowed client.
-            if self.client_address[0] != "172.30.32.2" and os.environ.get("UBOX_TEST_INGRESS") != "1":
+            if not self.allowed_ingress():
                 self.respond(403, b"Forbidden", "text/plain")
                 return
-            if path in ("/", ""):
+            if route in ("/", ""):
                 self.respond(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
-            elif path == "/status":
+            elif route == "/status":
                 self.json_response(200, {**STATE.status(), "snapshot_token": STATE.token})
-            elif path == "/snapshot.jpg":
+            elif route == "/snapshot.jpg":
                 self.snapshot()
             else:
                 self.respond(404, b"Not found", "text/plain")
             return
-        # Dedicated LAN interface: only token-protected image retrieval is supported.
-        if path == "/snapshot.jpg":
-            query = parse_qs(urlsplit(self.path).query)
-            candidate = (query.get("token") or [""])[0]
-            if not hmac.compare_digest(candidate, STATE.token):
+        if route == "/health":
+            self.json_response(200, {"ok": True})
+        elif route in ("/snapshot.jpg", "/snapshot-meta.json"):
+            if not self.valid_token():
                 self.respond(401, b"Token required", "text/plain")
                 return
-            self.snapshot()
-        elif path == "/health":
-            self.json_response(200, {"ok": True})
+            if route == "/snapshot.jpg":
+                self.snapshot()
+            else:
+                # No session secrets, UID, IP or account details.
+                status = STATE.status()
+                self.json_response(200, {
+                    "has_image": status["has_image"],
+                    "last_success": status["last_success"],
+                    "capturing": status["capturing"],
+                    "interval_minutes": status["interval_minutes"],
+                    "last_error": status["last_error"],
+                })
         else:
             self.respond(404, b"Not found", "text/plain")
 
     def snapshot(self):
         assert STATE is not None
         try:
-            contents = STATE.image.read_bytes()
+            stats = STATE.image.stat()
+            if not stats.st_size:
+                raise FileNotFoundError()
+            # ETag enables cheap CYD polls; the old image remains during capture.
+            etag = '"%x-%x"' % (stats.st_mtime_ns, stats.st_size)
+            if self.headers.get("If-None-Match") == etag:
+                self.send_response(304)
+                self.send_header("ETag", etag)
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                return
+            content = STATE.image.read_bytes()
         except FileNotFoundError:
-            contents = b""
-        if not contents:
             self.respond(503, b"No image captured yet", "text/plain")
-        else:
-            self.respond(200, contents, "image/jpeg")
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("ETag", etag)
+        self.send_header("Content-Length", str(len(content)))
+        self.end_headers()
+        try:
+            self.wfile.write(content)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def do_POST(self):
         assert STATE is not None
-        if self.server.server_port != INGRESS_PORT or (
-            self.client_address[0] != "172.30.32.2"
-            and os.environ.get("UBOX_TEST_INGRESS") != "1"
-        ):
+        if not self.allowed_ingress():
             self.respond(403, b"Forbidden", "text/plain")
             return
-        path = urlsplit(self.path).path
-        if path not in ("/capture", "/discover", "/cloud-capture", "/rotate-token", "/live-capture"):
+        route = urlsplit(self.path).path
+        if route in ("/capture", "/live-capture"):
+            accepted, message = STATE.trigger()
+        elif route == "/discover":
+            accepted, message = STATE.discover()
+        elif route == "/rotate-token":
+            accepted, message = STATE.rotate_snapshot_token()
+        else:
             self.respond(404, b"Not found", "text/plain")
             return
-        if path == "/discover":
-            accepted, message = STATE.discover()
-        elif path == "/rotate-token":
-            accepted, message = STATE.rotate_snapshot_token()
-        elif path == "/cloud-capture":
-            accepted, message = STATE.trigger("cloud")
-        elif path == "/live-capture":
-            accepted, message = STATE.trigger("live_alt")
-        else:
-            accepted, message = STATE.trigger("p4p")
         self.json_response(202 if accepted else 409, {"accepted": accepted, "message": message})
 
 
 PAGE = '''<!doctype html><html lang="pl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>UBox Bridge</title>
-<style>body{font:16px system-ui;background:#121825;color:#f3f4f6;max-width:720px;margin:1.5rem auto;padding:1rem}
-.card{background:#202a3c;padding:1.2rem;margin:1rem 0;border-radius:12px}button{background:#5bbcff;color:#092034;border:0;border-radius:8px;padding:.8rem;font-weight:700;cursor:pointer}
-img{display:block;width:100%;max-width:560px;aspect-ratio:4/3;object-fit:contain;background:black;border-radius:8px}
-code{overflow-wrap:anywhere;color:#a6eeac}.err{color:#ffaaaa}</style></head>
-<body><h1>📷 UBox Bridge</h1><p>UBox P4P → JPEG 320×240 → Home Assistant / ESP32 CYD</p>
-<div class="card"><p id="status">Wczytywanie…</p><p id="err" class="err"></p>
-<button id="live">Zrób zdjęcie (nowy klient UBox)</button>
-<button id="capture">Test starego klienta P4P</button>
-<button id="discover">Wykryj kamery UBox</button><p id="devices"></p>
-<p><small>Nowy klient zestawia sesję UBox (wybudzenie, start wideo), odbiera klatki i zapisuje JPEG.
-To tryb eksperymentalny, bez użycia telefonu.</small></p>
-<pre id="liveDiag" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></div>
-<div class="card"><h3>Zdjęcie z chmury UBox (archiwum)</h3>
-<p>Sprawdza miniatury istniejących nagrań w chmurze — NIE wykonuje zdjęcia na żywo.
-Jeżeli kamera nie wysyła nagrań do chmury, wynik może być pusty.</p>
-<button id="cloud">Pobierz ostatnią miniaturę nagrania</button>
-<pre id="cloudDiag" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></div>
-<div class="card"><b>Diagnostyka P4P</b><p><small>Odpowiedzi na wybudzanie mogą pochodzić od serwerów UBox — same liczby pakietów nie potwierdzają połączenia z kamerą. Sekcje wake_message_types i stage2_message_types pokazują wyłącznie typy, rozmiary i liczbę pakietów (bez danych prywatnych).</small></p><pre id="diag" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></div><div class="card"><img id="image" alt="Ostatnia klatka"><p id="stamp">Brak zdjęcia</p></div>
-<div class="card"><b>Adres dla CYD (sieć lokalna):</b><p><code id="url"></code></p>
-<small>Zamień IP_HA na lokalny adres Raspberry Pi. Nie udostępniaj URL z tokenem publicznie.</small>
-<p><button id="rotate">Unieważnij poprzedni token / wygeneruj nowy</button></p></div>
-<script>let last='';async function refresh(){try{let r=await fetch('status',{cache:'no-store'}),s=await r.json();
-document.getElementById('status').textContent=!s.configured?'Skonfiguruj konto UBox lub ręczne dane P2P.':s.capturing?'Pobieranie obrazu…':s.detecting?'Wykrywanie kamer na koncie UBox…':s.has_image?'Ostatnia klatka dostępna.':'Kliknij Pobierz nową klatkę.';
-document.getElementById('err').textContent=s.last_error||s.discovery_error||'';
-document.getElementById('diag').textContent=JSON.stringify(s.diagnostics||{},null,2);
-document.getElementById('discover').disabled=!s.account_configured||s.detecting;
-document.getElementById('cloud').disabled=!s.account_configured||s.capturing;
-document.getElementById('live').disabled=!s.configured||s.capturing;
-document.getElementById('liveDiag').textContent=JSON.stringify(s.live_diagnostics||{},null,2);
-document.getElementById('cloudDiag').textContent=JSON.stringify(s.cloud_diagnostics||{},null,2);
-document.getElementById('devices').textContent=s.devices.map(d=>d.name+' (…'+d.uid_suffix+'): '+(d.has_device_password?'hasło P2P dostępne':'brak hasła P2P')).join(' | ');
-document.getElementById('capture').disabled=!s.configured||s.capturing;
-document.getElementById('stamp').textContent=(s.last_success||'Brak zdjęcia')+
-  (s.last_image_source==='cloud_recording'?' — archiwum UBox (czas zdarzenia: '+(s.last_cloud_event_utc ? new Date(s.last_cloud_event_utc*1000).toLocaleString():'nieznany')+')':
-   s.last_image_source==='p4p'?' — transmisja P4P':s.last_image_source==='live_alt'?' — nowa transmisja na żywo':'');
-document.getElementById('url').textContent='http://IP_HA:8100/snapshot.jpg?token='+encodeURIComponent(s.snapshot_token);
-if(s.has_image&&last!==s.last_success){last=s.last_success;document.getElementById('image').src='snapshot.jpg?t='+Date.now()}
-}catch(e){document.getElementById('status').textContent='Nie można odczytać statusu.'}}
-document.getElementById('capture').onclick=async()=>{let r=await fetch('capture',{method:'POST'});if(!r.ok)alert('Nie udało się rozpocząć pobierania');refresh()};
-document.getElementById('discover').onclick=async()=>{let r=await fetch('discover',{method:'POST'});if(!r.ok)alert('Nie udało się uruchomić wyszukiwania');refresh()};
-document.getElementById('cloud').onclick=async()=>{let r=await fetch('cloud-capture',{method:'POST'});if(!r.ok)alert('Nie udało się rozpocząć pobierania z chmury');refresh()};
-document.getElementById('live').onclick=async()=>{let r=await fetch('live-capture',{method:'POST'});if(!r.ok)alert('Nie udało się uruchomić nowej transmisji');refresh()};
-document.getElementById('rotate').onclick=async()=>{if(!confirm('Poprzedni adres JPEG przestanie działać. Zmienić token?'))return;let r=await fetch('rotate-token',{method:'POST'});if(!r.ok)alert('Nie udało się zmienić tokenu');refresh()};
-refresh();setInterval(refresh,4000);</script></body></html>'''
+<style>
+body{font:16px system-ui;background:#121825;color:#f3f4f6;max-width:760px;margin:1rem auto;padding:1rem}
+h1{font-size:1.8rem}h3{margin-top:0}.card{background:#202a3c;padding:1.2rem;margin:1rem 0;border-radius:12px}
+button{background:#5bbcff;color:#092034;border:0;border-radius:8px;padding:.8rem;margin:.15rem;font-weight:700;cursor:pointer}
+button:disabled{opacity:.45}img{display:block;width:100%;max-width:560px;aspect-ratio:4/3;object-fit:contain;background:black;border-radius:8px}
+code,pre{overflow-wrap:anywhere;white-space:pre-wrap;color:#a6eeac}
+.err{color:#ffaaaa}.muted{color:#b5c0cf}small{line-height:1.6}
+</style></head><body>
+<h1>📷 UBox Bridge</h1><p>XEGA 4G → zdjęcie na żywo → JPEG 320×240 → Home Assistant / CYD</p>
+<div class="card"><h3>Automatyczne zdjęcia</h3>
+<p id="status">Wczytywanie…</p><p id="err" class="err"></p>
+<p><b id="interval"></b></p>
+<button id="capture">Zrób nowe zdjęcie teraz</button>
+<button id="discover">Wykryj kamerę</button>
+<p id="devices" class="muted"></p>
+<p><small>Odstęp między zdjęciami zmienisz w <b>Konfiguracji dodatku</b>, pole
+<code>interval_minutes</code>. Przy wartości 0 automatyczne zdjęcia są wyłączone.
+CYD jedynie sprawdza zapisany JPEG — nie wybudza kamery.</small></p>
+<details><summary>Diagnostyka transmisji</summary>
+<pre id="diag"></pre></details></div>
+<div class="card"><h3>Ostatnia klatka</h3>
+<img id="image" alt="Ostatnia klatka">
+<p id="stamp" class="muted">Brak obrazu</p></div>
+<div class="card"><h3>CYD / sieć lokalna</h3>
+<p>CYD pobiera zdjęcie np. co 30 sekund, lecz transferuje JPEG tylko wtedy,
+gdy powstała nowa klatka (nagłówek ETag / HTTP 304).</p>
+<code id="url"></code>
+<p><small>Zamień IP_HA na adres Raspberry Pi. Endpoint przyjmuje też
+nagłówek <code>X-UBox-Token</code> zamiast parametru w adresie.
+Nie udostępniaj tokenu poza domową siecią.</small></p>
+<button id="rotate">Wygeneruj nowy token</button></div>
+<script>
+let last='',busy=false;
+async function refresh(){
+try{
+ const response=await fetch('status',{cache:'no-store'});
+ if(!response.ok)throw new Error('status HTTP '+response.status);
+ const s=await response.json();
+ document.getElementById('status').textContent=
+ !s.configured?'Skonfiguruj konto UBox.':s.capturing?'Trwa pobieranie nowego zdjęcia…':
+ s.has_image?'Ostatnia klatka dostępna.':'Brak obrazu; naciśnij przycisk zdjęcia.';
+ document.getElementById('err').textContent=s.last_error||s.discovery_error||'';
+ document.getElementById('interval').textContent=s.interval_minutes>0?
+ 'Nowe zdjęcie co '+s.interval_minutes+' min (Home Assistant)':
+ 'Automatyczne zdjęcia: wyłączone (interval_minutes=0)';
+ document.getElementById('capture').disabled=!s.configured||s.capturing;
+ document.getElementById('discover').disabled=!s.account_configured||s.detecting;
+ document.getElementById('devices').textContent=s.devices.map(d=>d.name+
+ ' (…'+d.uid_suffix+')'+(d.has_device_password?' — dostępna':' — brak hasła P2P')).join(' | ');
+ document.getElementById('stamp').textContent=s.last_success||'Brak zdjęcia';
+ document.getElementById('diag').textContent=JSON.stringify(s.live_diagnostics||{},null,2);
+ document.getElementById('url').textContent='http://IP_HA:8100/snapshot.jpg?token='+encodeURIComponent(s.snapshot_token);
+ if(s.has_image&&last!==s.last_success){last=s.last_success;document.getElementById('image').src='snapshot.jpg?t='+Date.now()}
+}catch(e){document.getElementById('status').textContent='Nie można odczytać stanu dodatku.'}
+}
+async function action(route){const r=await fetch(route,{method:'POST'});if(!r.ok)alert('Akcja nie została wykonana (HTTP '+r.status+')');refresh()}
+document.getElementById('capture').onclick=()=>action('capture');
+document.getElementById('discover').onclick=()=>action('discover');
+document.getElementById('rotate').onclick=()=>{if(confirm('Stary adres CYD przestanie działać. Zmienić token?'))action('rotate-token')};
+refresh();setInterval(refresh,4000);
+</script></body></html>'''
 
 
 def schedule(state: CameraState):
@@ -620,7 +503,7 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     STATE = CameraState()
     if not STATE.configured:
-        LOG.info("Camera not configured yet: set UID and device_password in addon options")
+        LOG.info("Camera not configured yet: set account_email/password or uid/device_password")
     if STATE.account_configured:
         STATE.discover()
     if STATE.options.get("capture_on_start", False):
