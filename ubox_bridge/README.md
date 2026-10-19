@@ -4,7 +4,7 @@ Home Assistant OS add-on for UBox / XEGA cameras. Attempts a short HEVC capture 
 
 **Compatibility is unverified** for XEGA XG-01-EU4G. Solar cameras may sleep. No continuous RTSP or ONVIF is supplied; camera firmware is not modified.
 
-Set uid and device_password (P2P device password, which may differ from the UBox account password). Keep interval_minutes: 0 and capture_on_start: false while testing. Open the HA Ingress panel and press the manual capture button.
+Set account_email and account_password to sign in to UBox and retrieve the device list and P2P password. If you have multiple cameras, set uid too. Manual uid/device_password remains supported. UBox account login by Google/Apple is not implemented. Keep interval_minutes: 0 and capture_on_start: false while testing. Open the HA Ingress panel and press the manual capture button.
 
 Port 8100 requires a randomly generated token stored on /data and displayed in the HA-authenticated panel. Use the address shown in that panel as the still_image_url for Generic Camera or your ESP32 JPEG client:
 

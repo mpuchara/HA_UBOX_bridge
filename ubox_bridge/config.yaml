@@ -1,5 +1,5 @@
 name: UBox Bridge
-version: "0.1.0"
+version: "0.2.0"
 slug: ubox_bridge
 description: Experimental UBox P4P snapshot bridge for Home Assistant and ESP32 CYD
 url: https://github.com/mpuchara/HA_UBOX_bridge
@@ -21,12 +21,16 @@ ports:
 ports_description:
   8100/tcp: Authenticated JPEG snapshot for Home Assistant and CYD (LAN only)
 options:
+  account_email: ""
+  account_password: ""
   uid: ""
   device_password: ""
   attempts: 3
   interval_minutes: 0
   capture_on_start: false
 schema:
+  account_email: str
+  account_password: password
   uid: str
   device_password: password
   attempts: int(1,8)

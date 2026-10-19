@@ -3,9 +3,11 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+import sys
 from unittest.mock import patch
 
 SRC = Path(__file__).resolve().parents[1] / "ubox_bridge" / "bridge.py"
+sys.path.insert(0, str(SRC.parent))
 spec = importlib.util.spec_from_file_location("bridge", SRC)
 bridge = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(bridge)

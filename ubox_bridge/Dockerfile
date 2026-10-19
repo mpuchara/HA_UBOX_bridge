@@ -1,4 +1,4 @@
-ARG BUILD_VERSION=0.1.0
+ARG BUILD_VERSION=0.2.0
 ARG BUILD_ARCH=amd64
 FROM ghcr.io/home-assistant/base:3.24
 ARG BUILD_VERSION
@@ -12,8 +12,8 @@ RUN apk add --no-cache python3 py3-pip ffmpeg git ca-certificates build-base pyt
     && git -C /opt/ubox-p4p checkout --detach FETCH_HEAD \
     && /opt/ubox-venv/bin/pip install --no-cache-dir -r /opt/ubox-p4p/requirements.txt \
     && apk del build-base python3-dev linux-headers git
-COPY bridge.py /app/bridge.py
+COPY bridge.py cloud_api.py /app/
 COPY run.sh /run.sh
-RUN chmod 0755 /run.sh && python3 -m py_compile /app/bridge.py
+RUN chmod 0755 /run.sh && python3 -m py_compile /app/bridge.py /app/cloud_api.py
 EXPOSE 8099 8100
 CMD ["/run.sh"]

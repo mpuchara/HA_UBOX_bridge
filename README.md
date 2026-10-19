@@ -4,7 +4,7 @@ Experimental Home Assistant OS add-on repository for solar / LTE cameras using U
 
 ## Install (recommended)
 
-In Home Assistant: Settings → Apps → Install app → ⋮ → Repositories; add https://github.com/mpuchara/HA_UBOX_bridge. Refresh the store, install **UBox Bridge**, enter UID and device password, and open the app panel to capture a first image.
+In Home Assistant: Settings → Apps → Install app → ⋮ → Repositories; add https://github.com/mpuchara/HA_UBOX_bridge. Refresh the store, install **UBox Bridge**, enter your UBox account email and password (or UID and device password), and open the app panel to capture a first image.
 
 ## Release packages
 

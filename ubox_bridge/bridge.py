@@ -7,6 +7,7 @@ CYD snapshot interface: TCP 8100, token-protected, LAN port (never forward publi
 from __future__ import annotations
 
 import hmac
+from cloud_api import UBoxApiError, discover_devices
 import json
 import logging
 import os
@@ -41,6 +42,10 @@ class CameraState:
         self.image = DATA / "last.jpg"
         self.lock = threading.Lock()
         self.busy = False
+        self.detecting = False
+        self.detected_devices = []
+        self.discovery_at = 0
+        self.discovery_error = None
         self.last_error = None
         self.last_attempt = None
         self.last_success = None
@@ -66,15 +71,87 @@ class CameraState:
             raise ValueError("snapshot token damaged")
 
     @property
+    def account_configured(self) -> bool:
+        return bool(str(self.options.get("account_email", "")).strip()
+                    and str(self.options.get("account_password", "")).strip())
+
+    @property
     def configured(self) -> bool:
-        return bool(str(self.options.get("uid", "")).strip()
-                    and str(self.options.get("device_password", "")).strip())
+        manual = bool(str(self.options.get("uid", "")).strip()
+                      and str(self.options.get("device_password", "")).strip())
+        return manual or self.account_configured
+
+    def load_devices(self, force=False):
+        if not self.account_configured:
+            raise UBoxApiError("Skonfiguruj e-mail i hasło UBox.")
+        if not force and self.detected_devices and time.time() - self.discovery_at < 3600:
+            return list(self.detected_devices)
+        devices = discover_devices(self.options["account_email"],
+                                   self.options["account_password"])
+        with self.lock:
+            self.detected_devices = devices
+            self.discovery_at = time.time()
+        return list(devices)
+
+    def resolve_camera(self):
+        selected = str(self.options.get("uid", "")).strip()
+        manual_password = str(self.options.get("device_password", "")).strip()
+        if selected and manual_password:
+            return selected, manual_password
+        devices = self.load_devices()
+        if not devices:
+            raise UBoxApiError("Brak kamer przypisanych do konta UBox.")
+        if selected:
+            matches = [device for device in devices if device.uid == selected]
+            if not matches:
+                raise UBoxApiError("UID kamery nie występuje na koncie UBox.")
+            device = matches[0]
+        elif len(devices) == 1:
+            device = devices[0]
+        else:
+            raise UBoxApiError("Wykryto kilka kamer. Podaj UID wybranej kamery w konfiguracji.")
+        if not device.password:
+            raise UBoxApiError("UBox nie udostępnia hasła P2P dla tego urządzenia.")
+        return device.uid, device.password
+
+    def discover(self):
+        if not self.account_configured:
+            return False, "Skonfiguruj e-mail i hasło UBox."
+        with self.lock:
+            if self.detecting:
+                return False, "Wyszukiwanie kamer już trwa."
+            self.detecting = True
+            self.discovery_error = None
+        threading.Thread(target=self._discover_worker, daemon=True).start()
+        return True, "Sprawdzanie konta UBox rozpoczęte."
+
+    def _discover_worker(self):
+        try:
+            devices = self.load_devices(force=True)
+            LOG.info("Cloud discovery completed: %d devices", len(devices))
+            if not devices:
+                with self.lock:
+                    self.discovery_error = "Konto UBox nie ma przypisanych kamer."
+        except UBoxApiError as exc:
+            with self.lock:
+                self.discovery_error = str(exc)
+            LOG.warning("Account discovery failed: %s", exc)
+        except Exception:
+            with self.lock:
+                self.discovery_error = "Nieoczekiwany błąd komunikacji z UBox."
+        finally:
+            with self.lock:
+                self.detecting = False
 
     def status(self) -> dict:
         with self.lock:
             return {
                 "configured": self.configured,
+                "account_configured": self.account_configured,
                 "capturing": self.busy,
+                "detecting": self.detecting,
+                "discovery_error": self.discovery_error,
+                "devices": [device.public() for device in self.detected_devices],
                 "last_attempt": self.last_attempt,
                 "last_success": self.last_success,
                 "last_error": self.last_error,
@@ -84,7 +161,7 @@ class CameraState:
 
     def trigger(self) -> tuple[bool, str]:
         if not self.configured:
-            return False, "Skonfiguruj UID i hasło urządzenia w ustawieniach dodatku."
+            return False, "Skonfiguruj konto UBox albo UID i hasło P2P."
         with self.lock:
             if self.busy:
                 return False, "Pobieranie już trwa."
@@ -95,10 +172,9 @@ class CameraState:
         return True, "Próba pobrania obrazu rozpoczęta."
 
     def capture(self):
-        uid = str(self.options["uid"]).strip()
-        password = str(self.options["device_password"]).strip()
         attempts = min(8, max(1, int(self.options.get("attempts", 3))))
         try:
+            uid, password = self.resolve_camera()
             with tempfile.TemporaryDirectory(prefix="capture-", dir=DATA) as folder:
                 raw = Path(folder) / "capture.h265"
                 jpeg = Path(folder) / "capture.jpg"
@@ -130,7 +206,7 @@ class CameraState:
                 LOG.info("Snapshot ready (%s bytes)", self.image.stat().st_size)
         except subprocess.TimeoutExpired:
             self.fail("Upłynął limit czasu odpowiedzi kamerki.")
-        except (RuntimeError, OSError, ValueError) as exc:
+        except (RuntimeError, OSError, ValueError, UBoxApiError) as exc:
             self.fail(str(exc))
         except Exception:
             # Unexpected exception may carry upstream identifiers; never log traceback.
@@ -149,7 +225,7 @@ STATE: CameraState | None = None
 
 
 class ApiHandler(BaseHTTPRequestHandler):
-    server_version = "UBoxBridge/0.1"
+    server_version = "UBoxBridge/0.2"
 
     def log_message(self, fmt, *args):
         # Never log URLs or query strings containing the snapshot token.
@@ -220,10 +296,11 @@ class ApiHandler(BaseHTTPRequestHandler):
         ):
             self.respond(403, b"Forbidden", "text/plain")
             return
-        if urlsplit(self.path).path != "/capture":
+        path = urlsplit(self.path).path
+        if path not in ("/capture", "/discover"):
             self.respond(404, b"Not found", "text/plain")
             return
-        accepted, message = STATE.trigger()
+        accepted, message = STATE.discover() if path == "/discover" else STATE.trigger()
         self.json_response(202 if accepted else 409, {"accepted": accepted, "message": message})
 
 
@@ -235,19 +312,22 @@ img{display:block;width:100%;max-width:560px;aspect-ratio:4/3;object-fit:contain
 code{overflow-wrap:anywhere;color:#a6eeac}.err{color:#ffaaaa}</style></head>
 <body><h1>📷 UBox Bridge</h1><p>UBox P4P → JPEG 320×240 → Home Assistant / ESP32 CYD</p>
 <div class="card"><p id="status">Wczytywanie…</p><p id="err" class="err"></p>
-<button id="capture">Pobierz nową klatkę</button></div>
+<button id="capture">Pobierz nową klatkę</button> <button id="discover">Wykryj kamery UBox</button><p id="devices"></p></div>
 <div class="card"><img id="image" alt="Ostatnia klatka"><p id="stamp">Brak zdjęcia</p></div>
 <div class="card"><b>Adres dla CYD (sieć lokalna):</b><p><code id="url"></code></p>
 <small>Zamień IP_HA na lokalny adres Raspberry Pi. Nie udostępniaj URL z tokenem publicznie.</small></div>
 <script>let last='';async function refresh(){try{let r=await fetch('status',{cache:'no-store'}),s=await r.json();
-document.getElementById('status').textContent=!s.configured?'Ustaw UID i hasło w konfiguracji dodatku.':s.capturing?'Pobieranie obrazu…':s.has_image?'Ostatnia klatka dostępna.':'Brak klatki. Kliknij Pobierz.';
-document.getElementById('err').textContent=s.last_error||'';
+document.getElementById('status').textContent=!s.configured?'Skonfiguruj konto UBox lub ręczne dane P2P.':s.capturing?'Pobieranie obrazu…':s.detecting?'Wykrywanie kamer na koncie UBox…':s.has_image?'Ostatnia klatka dostępna.':'Kliknij Pobierz nową klatkę.';
+document.getElementById('err').textContent=s.last_error||s.discovery_error||'';
+document.getElementById('discover').disabled=!s.account_configured||s.detecting;
+document.getElementById('devices').textContent=s.devices.map(d=>d.name+' (…'+d.uid_suffix+'): '+(d.has_device_password?'hasło P2P dostępne':'brak hasła P2P')).join(' | ');
 document.getElementById('capture').disabled=!s.configured||s.capturing;
 document.getElementById('stamp').textContent=s.last_success||'Brak zdjęcia';
 document.getElementById('url').textContent='http://IP_HA:8100/snapshot.jpg?token='+encodeURIComponent(s.snapshot_token);
 if(s.has_image&&last!==s.last_success){last=s.last_success;document.getElementById('image').src='snapshot.jpg?t='+Date.now()}
 }catch(e){document.getElementById('status').textContent='Nie można odczytać statusu.'}}
 document.getElementById('capture').onclick=async()=>{let r=await fetch('capture',{method:'POST'});if(!r.ok)alert('Nie udało się rozpocząć pobierania');refresh()};
+document.getElementById('discover').onclick=async()=>{let r=await fetch('discover',{method:'POST'});if(!r.ok)alert('Nie udało się uruchomić wyszukiwania');refresh()};
 refresh();setInterval(refresh,4000);</script></body></html>'''
 
 
@@ -272,6 +352,8 @@ def main():
     STATE = CameraState()
     if not STATE.configured:
         LOG.info("Camera not configured yet: set UID and device_password in addon options")
+    if STATE.account_configured:
+        STATE.discover()
     if STATE.options.get("capture_on_start", False):
         STATE.trigger()
     if int(STATE.options.get("interval_minutes", 0)):
