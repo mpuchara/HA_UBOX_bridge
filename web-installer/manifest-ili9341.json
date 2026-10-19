@@ -1,0 +1,16 @@
+{
+  "name": "UBox CYD Monitor — ILI9341",
+  "version": "0.2.5",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        {
+          "path": "./firmware/ubox-cyd-ili9341.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}

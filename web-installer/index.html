@@ -25,30 +25,37 @@
   <h1>UBox CYD — instalator</h1>
   <p class="subtitle">Wgraj firmware jednym kliknięciem przez USB. Nie potrzebujesz VS Code ani PlatformIO.</p>
   <section class="panel">
-    <h2>1. Wgraj firmware</h2>
+    <h2>1. Wybierz właściwy sterownik ekranu</h2>
+    <p><b>Na zdjęciu Twoja płytka ma dwa USB. Najpierw spróbuj ST7789.</b> Błędny sterownik może wyświetlać tylko fragment obrazu albo zostawiać stare pasy pikseli.</p>
     <ol>
       <li>Podłącz CYD przez USB do komputera.</li>
       <li>Otwórz stronę w <b>Chrome lub Edge na Windows</b> i kliknij „Połącz / Zainstaluj”.</li>
       <li>Wybierz port płytki (u Ciebie <b>COM4</b>) i zaakceptuj instalację.</li>
       <li>Poczekaj na zakończenie wgrywania. Nie odłączaj urządzenia podczas flashowania.</li>
     </ol>
+    <h3>Opcja A — ST7789 (zalecana dla płytki z 2 USB)</h3>
     <esp-web-install-button manifest="./manifest.json">
       <span slot="unsupported">Instalacja przez USB wymaga Chrome lub Edge na komputerze z obsługą Web Serial, na stronie HTTPS.</span>
       <span slot="not-allowed">Dostęp do portu szeregowego został zablokowany przez przeglądarkę.</span>
     </esp-web-install-button>
-    <p class="muted"><small>Przy pierwszej instalacji zawartość flash ESP32 może zostać wyczyszczona. Projekt przeznaczony jest wyłącznie dla klasycznego CYD ESP32-2432S028 z ekranem ILI9341, a nie dla wariantów ESP32-S3/P4.</small></p>
+    <h3>Opcja B — ILI9341 (awaryjna, jeśli ST7789 nie działa poprawnie)</h3>
+    <esp-web-install-button manifest="./manifest-ili9341.json">
+      <span slot="unsupported">Wymaga Chrome lub Edge z Web Serial.</span>
+      <span slot="not-allowed">Brak dostępu do portu szeregowego.</span>
+    </esp-web-install-button>
+    <p class="muted"><small>Najpierw sprawdź ekrany testowe 4 kolorów. Całe 320×240 powinno się wypełniać bez pozostałości poprzednich pikseli. Przy pierwszej instalacji zawartość flash ESP32 może zostać wyczyszczona.</small></p>
   </section>
   <section class="panel">
     <h2>2. Skonfiguruj przez Wi-Fi</h2>
     <ol>
-      <li>Po restarcie ekran CYD pokaże własną sieć <code>UBox-CYD-XXXX</code> i jej <b>losowe hasło</b>.</li>
+      <li>Po restarcie ekran CYD pokaże własną sieć <code>CYD</code> z hasłem <code>12345678</code>.</li>
       <li>Połącz telefon lub komputer z tą siecią Wi-Fi.</li>
       <li>Jeśli strona ustawień nie otworzy się automatycznie, wpisz <code>http://192.168.4.1</code>.</li>
       <li>Wybierz swoją domową sieć Wi-Fi <b>2,4 GHz</b> i wpisz jej hasło.</li>
       <li>W polach dodatkowych wpisz <b>IP Raspberry Pi z HA</b> (np. <code>192.168.1.100</code>, bez <code>:8123</code>) oraz <b>token zdjęć z UBox Bridge</b>.</li>
       <li>Zapisz. CYD przełączy się na domowe Wi-Fi i pobierze ostatni JPEG z Home Assistanta.</li>
     </ol>
-    <p class="muted">Ustawienia Wi-Fi, HA i token zapisywane są lokalnie w pamięci ESP32. Nie są przesyłane do tej witryny. Hasło sieci konfiguracyjnej jest losowane na urządzeniu.</p>
+    <p class="muted">Ustawienia Wi-Fi, HA i token zapisywane są lokalnie w pamięci ESP32. Nie są przesyłane do tej witryny. Hasło AP 12345678 jest łatwe do odgadnięcia — konfiguruj wyłącznie w zaufanym miejscu.</p>
   </section>
   <section class="panel">
     <h2>3. Aktualizowanie zdjęcia</h2>

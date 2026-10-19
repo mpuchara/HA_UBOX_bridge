@@ -33,6 +33,7 @@ uint8_t screenRotation = DEFAULT_SCREEN_ROTATION;
 static constexpr uint16_t JPEG_WIDTH = 320;
 static constexpr uint16_t JPEG_HEIGHT = 240;
 static bool jpegGeometryError = false;
+static uint32_t jpegPixelsWritten = 0;
 
 bool tftBlock(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* colors) {
   if (!colors || x < 0 || y < 0 || !w || !h ||
@@ -42,6 +43,7 @@ bool tftBlock(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* colors) {
     return false;
   }
   tft.pushImage(x, y, w, h, colors);
+  jpegPixelsWritten += static_cast<uint32_t>(w) * h;
   return true;
 }
 
@@ -96,6 +98,13 @@ void displaySelfTest() {
   tft.drawRect(0, 0, w, h, TFT_YELLOW);
   tft.setTextColor(TFT_BLACK, TFT_WHITE);
   tft.drawString("ROT " + String(screenRotation), w / 2 + 12, h / 2 + 12, 2);
+#if defined(ST7789_DRIVER)
+  tft.setTextColor(TFT_BLACK, TFT_WHITE);
+  tft.drawString("ST7789", w / 2 + 8, h / 2 + 38, 2);
+#elif defined(ILI9341_DRIVER)
+  tft.setTextColor(TFT_BLACK, TFT_WHITE);
+  tft.drawString("ILI9341", w / 2 + 8, h / 2 + 38, 2);
+#endif
   delay(1600);
   tft.fillScreen(TFT_BLACK);
 }
@@ -256,19 +265,25 @@ void pollImage() {
     return;
   }
   jpegGeometryError = false;
-  // Fullscreen redraw so stale pixels from earlier frames never remain.
+  jpegPixelsWritten = 0;
+  // Clear stale fragments before decoding; pushImage handles its own SPI
+  // transactions, so do not nest manual tft.startWrite()/endWrite() calls.
   tft.fillScreen(TFT_BLACK);
-  tft.startWrite();
   const JRESULT result = TJpgDec.drawJpg(0, 0, bytes.get(), static_cast<uint32_t>(received));
-  tft.endWrite();
-  if (result == JDR_OK && !jpegGeometryError) {
+  const bool fullFrame = (jpegPixelsWritten == static_cast<uint32_t>(JPEG_WIDTH) * JPEG_HEIGHT);
+  if (result == JDR_OK && !jpegGeometryError && fullFrame) {
     lastEtag = etag;
     Serial.printf("New landscape JPEG: %u bytes; directly drawn at 320x240\n",
                   static_cast<unsigned>(received));
   } else {
-    Serial.printf("JPEG error: %d (geometry %d)\n",
-                  static_cast<int>(result), static_cast<int>(jpegGeometryError));
-    showMessage("Blad dekodowania JPEG", TFT_RED);
+    Serial.printf("JPEG error: %d (geometry %d, pixels %lu/%lu)\n",
+                  static_cast<int>(result), static_cast<int>(jpegGeometryError),
+                  static_cast<unsigned long>(jpegPixelsWritten),
+                  static_cast<unsigned long>(JPEG_WIDTH) * JPEG_HEIGHT);
+    // The HTTP ETag must NOT advance on an incomplete frame.
+    tft.fillScreen(TFT_BLACK);
+    writeScreenLine("JPEG niepelny", 8, TFT_RED);
+    writeScreenLine("Sprobuj ponownie", 38, TFT_YELLOW);
   }
   http.end();
 }

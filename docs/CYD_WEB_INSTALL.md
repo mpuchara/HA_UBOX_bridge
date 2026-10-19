@@ -66,3 +66,16 @@ krótkie naciśnięcie BOOT przełącza 1 ↔ 3, gdyby montaż odwrócił tekst.
 Dłuższe BOOT (5 s) resetuje konfigurację Wi-Fi i HA.
 AP `CYD`, hasło `12345678` (łatwe do odgadnięcia, tylko na czas konfiguracji).
 W chwili uruchamiania sprawdź pola testowe LCD, niezależne od obrazu kamery.
+
+## Wybór sterownika CYD v0.2.5 — dwa gniazda USB
+
+Płytka ESP32-2432S028 z dwoma portami USB może mieć sterownik ST7789 zamiast
+ILI9341. W instalatorze jest **ST7789 (zalecany pierwszy test)** i
+**ILI9341 (alternatywa)**. Sprawdź po uruchomieniu cztery kolorowe pola
+z oznaczeniem sterownika. Jeśli widzisz poprzednie piksele/pasy, spróbuj
+drugiego sterownika. Nie trzeba wymieniać płytki.
+
+Zaktualizuj najpierw UBox Bridge do 0.5.6, wykonaj nowe zdjęcie.
+Od tej wersji obrót o 90° w lewo dotyczy także właściwego zdjęcia,
+nie tylko menu LCD. W konfiguracji dodatku jest `camera_rotation: 90`.
+Sieć AP: `CYD`, hasło `12345678` (słabe; uruchamiaj tylko na czas konfiguracji).

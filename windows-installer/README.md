@@ -19,3 +19,10 @@ potentially trustworthy Web Serial origin in modern Chrome/Edge.
 erase the current ESP32 configuration. The local HTTP server accepts only
 GET requests for a fixed allowlist of bundled paths and binds exclusively
 to loopback. Review scripts before running.
+
+## 0.2.5: choose the LCD controller
+
+The local install page now offers **ST7789** (recommended as first test for
+this two-USB ESP32-2432S028 PCB) and **ILI9341** (fallback). The ZIP contains
+both binary images and manifests. Use a clean four-color test after flashing.
+The setup AP is `CYD`/`12345678`; this is a weak, user-requested password.

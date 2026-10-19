@@ -5,6 +5,8 @@ $files=@{
   '/'='index.html'
   '/index.html'='index.html'
   '/manifest.json'='manifest.json'
+  '/manifest-ili9341.json'='manifest-ili9341.json'
+  '/firmware/ubox-cyd-ili9341.bin'='firmware/ubox-cyd-ili9341.bin'
   '/firmware/ubox-cyd-esp32.bin'='firmware/ubox-cyd-esp32.bin'
   '/firmware/SHA256SUMS.txt'='firmware/SHA256SUMS.txt'
 }
