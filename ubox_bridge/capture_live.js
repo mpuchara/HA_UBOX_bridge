@@ -100,9 +100,9 @@ async function run() {
       const frames = state ? state.backlog : [];
       if (!frames.length) continue;
       if (!firstFrameAt) firstFrameAt=Date.now();
-      // Buffer one second of real video so IDR/SPS/PPS are more likely complete.
+      // Buffer up to ~2.5s (or >=24 frames) to avoid decoding partial IDR slices.
       const assembled = assembleFrames(frames, detectStreamFormat, isAnnexBKeyframe);
-      if (assembled && (frames.length >= 8 || Date.now()-firstFrameAt >= 2000)) {
+      if (assembled && (frames.length >= 24 || Date.now()-firstFrameAt >= 2500)) {
         fs.writeFileSync(output, assembled.buffer, {mode:0o600,flag:"wx"});
         summary = summarize(session, frames.length, assembled.buffer.length, assembled.format, phaseCounts);
         success = true;

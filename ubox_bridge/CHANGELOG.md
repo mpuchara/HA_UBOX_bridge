@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.2 — less corrupted P4P snapshots
+
+- Buffer more UBox video frames before closing relay session to avoid incomplete first frames.
+- Decode and score multiple still candidates to reject green concealment and horizontal stripe artifacts.
+- Report quality metrics in Home Assistant Ingress diagnostics.
+- Reduce CYD display SPI frequency from 27 to 20 MHz to help rule out TFT transfer artifacts.
+- Keep CYD-side left rotation from firmware v0.2.1 and original Home Assistant JPEG endpoint.
+- Limitation: lost upstream video slices cannot be reconstructed from an irreparably damaged stream.
+
 ## 0.5.1 — CYD firmware build validation
 
 - Fix ESP32 HTTP image stream read timeout and confirm firmware compilation in CI.

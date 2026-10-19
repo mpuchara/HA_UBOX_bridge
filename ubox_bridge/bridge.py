@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hmac
 from cloud_api import UBoxApiError, discover_devices
+from frame_quality import select_cleanest
 import json
 import logging
 import os
@@ -267,16 +268,35 @@ class CameraState:
                 codec = self.live_diagnostics.get("codec") if self.live_diagnostics else None
                 if codec not in ("h264","hevc"):
                     raise RuntimeError("Nowy klient odebrał dane, ale nie rozpoznał kodeka.")
+                # The first P4P relay frame may be corrupted. Extract several
+                # low-resolution RGB candidates, then select the one with the
+                # fewest green concealment areas / horizontal scanline artifacts.
+                candidate_pattern = str(Path(folder) / "candidate_%03d.ppm")
+                subprocess.run(
+                    [FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
+                     "-threads", "2", "-f", codec, "-i", str(raw),
+                     "-vf", "fps=6,scale=320:240:force_original_aspect_ratio=decrease,"
+                            "pad=320:240:(ow-iw)/2:(oh-ih)/2",
+                     "-vsync", "0", "-frames:v", "18", candidate_pattern],
+                    capture_output=True, timeout=45, check=False,
+                )
+                candidates = sorted(Path(folder).glob("candidate_*.ppm"))
+                if not candidates:
+                    raise RuntimeError("Nie udało się odkodować poprawnej klatki ze strumienia UBox.")
+                best, metrics = select_cleanest(candidates)
+                with self.lock:
+                    if self.live_diagnostics is not None:
+                        self.live_diagnostics["snapshot_quality"] = metrics
+                LOG.info("Snapshot selection: %d candidates, green %.3f, stripes %.3f",
+                         len(candidates), metrics["green_fraction"], metrics["stripe_score"])
                 ff = subprocess.run(
                     [FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
-                     "-f", codec, "-i", str(raw),
-                     "-vf", "scale=320:240:force_original_aspect_ratio=decrease,"
-                            "pad=320:240:(ow-iw)/2:(oh-ih)/2",
-                     "-frames:v", "1", "-q:v", "3", str(jpeg)],
-                    capture_output=True, timeout=30, check=False,
+                     "-i", str(best), "-frames:v", "1",
+                     "-pix_fmt", "yuvj420p", "-q:v", "4", str(jpeg)],
+                    capture_output=True, timeout=25, check=False,
                 )
                 if ff.returncode or not jpeg.is_file() or not jpeg.stat().st_size:
-                    raise RuntimeError("Odebrano klatki, lecz FFmpeg nie utworzył zdjęcia.")
+                    raise RuntimeError("Wybrano klatkę, ale FFmpeg nie przygotował JPEG.")
                 os.replace(jpeg, self.image)
             self.publish_metadata("live_alt")
             LOG.info("Live stream snapshot saved (%d bytes)", self.image.stat().st_size)
@@ -300,7 +320,7 @@ STATE: CameraState | None = None
 
 
 class ApiHandler(BaseHTTPRequestHandler):
-    server_version = "UBoxBridge/0.5.0"
+    server_version = "UBoxBridge/0.5.2"
 
     def log_message(self, fmt, *args):
         # Never log URLs or query strings containing the snapshot token.

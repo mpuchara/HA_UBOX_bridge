@@ -18,7 +18,7 @@ captures a HEVC/H.264 frame and saves a JPEG 320×240.
 Add this repository to the HAOS add-on store:
 `https://github.com/mpuchara/HA_UBOX_bridge`
 
-Install/upgrade **UBox Bridge** to v0.5.1. Existing UBox login options and
+Install/upgrade **UBox Bridge** to v0.5.2. Existing UBox login options and
 cached image are preserved. Change `interval_minutes` in the add-on
 configuration to **15** for a fresh snapshot every 15 minutes (or **0** to
 disable automatic capture); **existing installations keep the previous

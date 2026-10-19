@@ -31,3 +31,7 @@ Firmware przechowuje token w NVS i łączy się z HA przez lokalne HTTP,
 dlatego nie wystawiaj portu HA 8100 na Internet.
 
 Jeżeli poziome pasy pozostają, otwórz ostatni obraz w panelu UBox Bridge na telefonie. Jeżeli są widoczne także tam, pochodzą z niekompletnych klatek transmisji P4P i nie naprawi ich sterownik LCD.
+
+Od firmware CYD v0.2.2 transmisja SPI do ILI9341 działa z prędkością 20 MHz
+(zamiast 27 MHz). Obrót JPEG o 90° w lewo i pełne 240×320 zostały
+wprowadzone w v0.2.1. Obraz w HA pozostaje w poziomie 320×240.

@@ -27,3 +27,12 @@ the addon. Camera battery and data use may increase with frequent captures.
 The upstream code is experimental. Do not expose the LAN port publicly.
 
 The token persists in /data; the Ingress panel can rotate it.
+
+## Migotanie i poziome pasy na klatkach
+
+Od v0.5.2 mostek zbiera więcej danych H.264/H.265, dekoduje kilka
+kandydatów i wybiera najmniej uszkodzoną klatkę (na podstawie pasów i
+zielonych obszarów). Jeśli paski występują także w panelu HA, problem
+najpewniej pochodzi z transmisji P4P. Jeżeli tylko na CYD, sprawdź
+firmware v0.2.2 z SPI 20 MHz. Uszkodzonych bajtów nie można odtworzyć
+bez otrzymania poprawnej klatki od kamery.

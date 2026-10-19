@@ -1,5 +1,5 @@
 name: UBox Bridge
-version: "0.5.1"
+version: "0.5.2"
 slug: ubox_bridge
 description: On-demand and periodic live snapshots for UBox LTE cameras, HA and ESP32 CYD
 url: https://github.com/mpuchara/HA_UBOX_bridge
