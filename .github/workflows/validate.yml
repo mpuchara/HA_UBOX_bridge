@@ -40,7 +40,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build x86_64 add-on image (ARM64 still requires Pi 4 validation)
-        run: docker build --build-arg BUILD_ARCH=amd64 --build-arg BUILD_VERSION=0.5.7 -t ubox-bridge:smoke ubox_bridge
+        run: docker build --build-arg BUILD_ARCH=amd64 --build-arg BUILD_VERSION=0.5.8 -t ubox-bridge:smoke ubox_bridge
       - name: Check server startup and health
         run: |
           docker run -d --name ubox --publish 127.0.0.1:18100:8100 ubox-bridge:smoke

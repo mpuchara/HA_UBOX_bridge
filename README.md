@@ -18,7 +18,7 @@ captures a HEVC/H.264 frame and stores a full-resolution JPEG from the actual P4
 Add this repository to the HAOS add-on store:
 `https://github.com/mpuchara/HA_UBOX_bridge`
 
-Install/upgrade **UBox Bridge** to v0.5.7. Existing UBox login options and
+Install/upgrade **UBox Bridge** to v0.5.8. Existing UBox login options and
 cached image are preserved. Change `interval_minutes` in the add-on
 configuration to **15** for a fresh snapshot every 15 minutes (or **0** to
 disable automatic capture); **existing installations keep the previous
@@ -108,3 +108,15 @@ soft-filled background), cover (full LCD with cropped sides) or contain
 moves the crop. HA native JPEG remains unchanged.
 Restarting the add-on regenerates the CYD JPEG from the cached HA master,
 without any LTE wake-up or data usage.
+
+## Request native HD from UBox (0.5.8)
+
+UBox P4P differentiates \`streamIndex=0\` (SD) and \`streamIndex=1\` (HD)
+according to published reverse-engineered API documentation. The add-on
+previously used 0 and received 640x360. Now \`video_quality: hd\` is the
+default, even for existing saved options with \`stream_index: 0\`. Use
+\`video_quality: sd\` to return to SD, or \`manual\` to use the legacy
+\`stream_index\` selector. The real resolution appears in the Ingress
+panel after a successful photo; HD is **requested, not guaranteed**.
+Failure retains the old cached still and does not automatically retry SD.
+No firmware change to CYD or new JPEG URL is needed.

@@ -32,6 +32,8 @@ class LiveCaptureTests(unittest.TestCase):
                 "counters":{"rx":200,"h264Frames":15}}
             def run(cmd, **kwargs):
                 command_log.append(cmd)
+                if str(cmd[0]).endswith("node"):
+                    self.assertEqual(kwargs["env"]["UBOX_STREAM_INDEX"], "1")
                 if str(cmd[0]).endswith("ffprobe"):
                     return Process(stdout=b'{"streams":[{"width":2304,"height":1296}]}')
                 if str(cmd[0]).endswith("node"):
@@ -59,6 +61,11 @@ class LiveCaptureTests(unittest.TestCase):
                 self.assertTrue(status["has_cyd_image"])
                 self.assertTrue(status["has_cyd_wide_image"])
                 self.assertEqual(status["source_resolution"],"2304x1296")
+                self.assertEqual(status["video_quality"],"hd")
+                self.assertEqual(status["requested_stream_index"],1)
+                self.assertEqual(status["last_stream_index"],1)
+                saved=json.loads((base/"last_metadata.json").read_text())
+                self.assertEqual(saved["stream_index"],1)
                 self.assertIn("2304x1296",json.dumps(status["live_diagnostics"]))
                 native_commands=[c for c in command_log if str(c[-1]).endswith("frame.jpg")]
                 self.assertEqual(len(native_commands),1)
@@ -99,6 +106,37 @@ class LiveCaptureTests(unittest.TestCase):
                 self.assertIn("(iw-ow)*80/100",str(commands[0]))
                 self.assertNotIn("transpose",str(commands[0]))
                 self.assertNotIn("node",str(commands[0]))
+
+    def test_failed_hd_does_not_destroy_existing_sd_snapshot(self):
+        with tempfile.TemporaryDirectory() as root:
+            base=Path(root)
+            (base/"options.json").write_text(json.dumps({
+                "uid":"ABCDEFGHIJKLMNOPQRST",
+                "device_password":"secret",
+                "video_quality":"hd",
+                "stream_index":0}))
+            (base/"last.jpg").write_bytes(b"known-good-SD")
+            (base/"last_metadata.json").write_text(json.dumps({
+                "source":"live_alt","source_resolution":"640x360","stream_index":0}))
+            commands=[]
+            def fake_run(cmd, **kwargs):
+                commands.append((cmd,kwargs))
+                return Process(returncode=1,stdout=json.dumps({
+                    "ok":False, "reason":"no_decodable_video",
+                    "diagnostics":{"relay_established":False,"counters":{},"stages":{}}
+                }).encode())
+            with patch.object(bridge,"DATA",base), \
+                 patch.object(bridge,"OPTIONS",base/"options.json"), \
+                 patch.object(bridge.subprocess,"run",side_effect=fake_run):
+                st=bridge.CameraState()
+                st.busy=True
+                st.capture_live_alt()
+                self.assertEqual((base/"last.jpg").read_bytes(), b"known-good-SD")
+                self.assertEqual(st.status()["last_stream_index"],0)
+                self.assertEqual(st.status()["requested_stream_index"],1)
+                self.assertEqual(st.status()["source_resolution"],"640x360")
+                self.assertEqual(commands[0][1]["env"]["UBOX_STREAM_INDEX"],"1")
+                self.assertIn("P4P",st.status()["last_error"])
 
     def test_failed_session_keeps_previous_snapshot(self):
         with tempfile.TemporaryDirectory() as root:

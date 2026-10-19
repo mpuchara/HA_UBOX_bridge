@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.8 — request UBox HD video instead of SD
+
+- UBox P4P streamIndex=0 requests SD, streamIndex=1 requests HD, according to the ubox_camera_api documentation (device support not guaranteed).
+- New option video_quality: hd (default), sd or manual. **Existing installs with stream_index: 0 will now request HD automatically**, because video_quality defaults to hd; manual preserves explicit stream_index.
+- Actual source JPEG dimensions are still determined by ffprobe and shown in the panel; asking for HD does not guarantee the camera delivers HD.
+- Record requested stream index in safe diagnostics and last successful index in persisted metadata. On HD capture failure preserve old image; do not automatically wake a solar LTE camera again for SD fallback.
+- Preserve JPEG framing, CYD ST7789/ILI9341 firmware and tokens. No ESP32 flashing needed.
+
 ## 0.5.7 — CYD source orientation and adjustable framing
 
 - Fix: no unwanted 90-degree camera rotation in /snapshot-cyd-wide.jpg; the frame is now aligned with the original Home Assistant snapshot.

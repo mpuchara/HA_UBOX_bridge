@@ -92,3 +92,19 @@ New addon options:
 HA stores the source JPEG unchanged, as delivered (for example 640x360).
 On startup the addon re-creates the 320x240 JPEG from the HA cache without
 connecting to the camera. No new LTE usage or CYD firmware update.
+
+## HD video selection in 0.5.8
+
+The add-on now requests \`streamIndex=1\` for HD by default; old
+\`stream_index: 0\` option is overridden. This follows the reverse-engineered
+UBox mapping documented at
+https://github.com/JEMcats/ubox_camera_api/blob/main/docs/stream_start.md
+but must be verified on this XEGA model.
+
+Configure \`video_quality: hd\` (default), \`sd\` (stream index 0), or
+\`manual\` (then \`stream_index\` controls 0 or 1). Existing settings and
+the CYD output endpoint are preserved. Trigger one manual capture and
+read the **actual saved resolution** in the Ingress panel. A request for HD
+is not proof of a HD stream. If HD capture fails, the last good SD snapshot
+will remain cached; you can change the profile to SD and restart, without
+forcing retries that would drain the LTE camera.

@@ -10,6 +10,7 @@ import hmac
 from cloud_api import UBoxApiError, discover_devices
 from frame_quality import select_cleanest
 from image_filters import landscape_filter, cyd_wide_filter
+from video_profiles import video_profile
 import json
 import logging
 import os
@@ -53,6 +54,7 @@ class CameraState:
         self.live_diagnostics = None
         self.last_source = None
         self.source_resolution = None
+        self.last_stream_index = None
         meta_path = DATA / "last_metadata.json"
         try:
             metadata = json.loads(meta_path.read_text(encoding="utf-8"))
@@ -60,6 +62,8 @@ class CameraState:
                 self.last_source = metadata["source"]
             if isinstance(metadata.get("source_resolution"), str):
                 self.source_resolution = metadata["source_resolution"]
+            if type(metadata.get("stream_index")) is int and metadata["stream_index"] in (0, 1):
+                self.last_stream_index = metadata["stream_index"]
         except (OSError, ValueError, AttributeError):
             pass
         self.last_attempt = None
@@ -172,6 +176,7 @@ class CameraState:
                 self.detecting = False
 
     def status(self) -> dict:
+        quality, requested_index = video_profile(self.options)
         with self.lock:
             return {
                 "configured": self.configured,
@@ -186,6 +191,9 @@ class CameraState:
                 "live_diagnostics": self.live_diagnostics,
                 "last_image_source": self.last_source,
                 "source_resolution": self.source_resolution,
+                "video_quality": quality,
+                "requested_stream_index": requested_index,
+                "last_stream_index": self.last_stream_index,
                 "cyd_fit_mode": self.options.get("cyd_fit_mode", "blur"),
                 "cyd_focus_x": int(self.options.get("cyd_focus_x", 50)),
                 "cyd_wide_revision": (
@@ -212,15 +220,17 @@ class CameraState:
         threading.Thread(target=self.capture_live_alt, daemon=True).start()
         return True, "Odbiór nowej klatki rozpoczęty."
 
-    def publish_metadata(self, source="live_alt", source_resolution=None):
+    def publish_metadata(self, source="live_alt", source_resolution=None, stream_index=None):
         tmp = DATA / "last_metadata.new"
         tmp.write_text(json.dumps({
-            "source": source, "source_resolution": source_resolution
+            "source": source, "source_resolution": source_resolution,
+            "stream_index": stream_index
         }), encoding="utf-8")
         os.replace(tmp, DATA / "last_metadata.json")
         with self.lock:
             self.last_source = source
             self.source_resolution = source_resolution
+            self.last_stream_index = stream_index
             self.last_success = utc_now()
 
     def capture_live_alt(self):
@@ -230,7 +240,9 @@ class CameraState:
         hypothetical UBox cloud 'take photo' endpoint.
         """
         try:
+            quality, stream_index = video_profile(self.options)
             uid, password = self.resolve_camera()
+            LOG.info("Requesting UBox quality=%s, streamIndex=%d", quality, stream_index)
             with tempfile.TemporaryDirectory(prefix="live-alt-", dir=DATA) as folder:
                 raw = Path(folder) / "live_stream"
                 jpeg = Path(folder) / "frame.jpg"
@@ -240,7 +252,7 @@ class CameraState:
                     "UBOX_PASSWORD": password,
                     "UBOX_OUTPUT": str(raw),
                     "UBOX_WAIT_SECONDS": str(max(10, min(75, int(self.options.get("live_timeout_seconds", 45))))),
-                    "UBOX_STREAM_INDEX": str(max(0, min(1, int(self.options.get("stream_index", 0))))),
+                    "UBOX_STREAM_INDEX": str(stream_index),
                 })
                 proc = subprocess.run(
                     [NODE_EXECUTABLE, str(LIVE_CAPTURE_SCRIPT)],
@@ -270,7 +282,8 @@ class CameraState:
                     self.live_diagnostics = {
                         "backend": "ubox-web",
                         "camera_rotation": int(self.options.get("camera_rotation", 90)),
-                        "stream_index": max(0, min(1, int(self.options.get("stream_index", 0)))),
+                        "stream_index": stream_index,
+                        "requested_video_quality": quality,
                         "relay_established": bool(diag.get("relay_established")),
                         "discovered_relay_count": min(100, int(diag.get("discovered_relay_count", 0))),
                         "codec": diag.get("codec") if diag.get("codec") in ("h264", "hevc") else None,
@@ -371,7 +384,8 @@ class CameraState:
                 os.replace(portrait, self.cyd_image)
                 os.replace(landscape, self.cyd_wide_image)
                 os.replace(jpeg, self.image)
-            self.publish_metadata("live_alt", source_resolution=source_resolution)
+            self.publish_metadata("live_alt", source_resolution=source_resolution,
+                                  stream_index=stream_index)
             LOG.info("Live snapshot stored in original stream resolution (%s; %d B)",
                      source_resolution or "unknown", self.image.stat().st_size)
         except subprocess.TimeoutExpired:
@@ -414,7 +428,7 @@ STATE: CameraState | None = None
 
 
 class ApiHandler(BaseHTTPRequestHandler):
-    server_version = "UBoxBridge/0.5.7"
+    server_version = "UBoxBridge/0.5.8"
 
     def log_message(self, fmt, *args):
         # Never log URLs or query strings containing the snapshot token.
@@ -479,6 +493,9 @@ class ApiHandler(BaseHTTPRequestHandler):
                     "has_cyd_image": status["has_cyd_image"],
                     "has_cyd_wide_image": status["has_cyd_wide_image"],
                     "source_resolution": status["source_resolution"],
+                    "video_quality": status["video_quality"],
+                    "requested_stream_index": status["requested_stream_index"],
+                    "last_stream_index": status["last_stream_index"],
                     "last_success": status["last_success"],
                     "capturing": status["capturing"],
                     "interval_minutes": status["interval_minutes"],
@@ -565,6 +582,7 @@ CYD jedynie sprawdza zapisany JPEG — nie wybudza kamery.</small></p>
 <pre id="diag"></pre></details></div>
 <div class="card"><h3>Ostatnia klatka HA (rozdzielczość źródłowa)</h3>
 <p id="resolution" class="muted">Odczyt rozdzielczości po nowej klatce.</p>
+<p id="quality" class="muted">Żądany profil UBox: HD (1).</p>
 <img id="image" alt="Ostatnia klatka">
 <p id="stamp" class="muted">Brak obrazu</p></div>
 <div class="card"><h3>Podgląd CYD (320×240 — USB po prawej)</h3>
@@ -605,7 +623,10 @@ try{
  document.getElementById('devices').textContent=s.devices.map(d=>d.name+
  ' (…'+d.uid_suffix+')'+(d.has_device_password?' — dostępna':' — brak hasła P2P')).join(' | ');
  document.getElementById('stamp').textContent=s.last_success||'Brak zdjęcia';
- document.getElementById('resolution').textContent='Źródłowy strumień: '+(s.source_resolution||'brak danych — pobierz nowe zdjęcie');
+ document.getElementById('resolution').textContent='Rzeczywisty zapisany obraz: '+(s.source_resolution||'brak danych — pobierz nowe zdjęcie');
+ document.getElementById('quality').textContent='Żądany profil: '+s.video_quality.toUpperCase()+
+ ' (streamIndex '+s.requested_stream_index+')'+
+ (s.last_stream_index!==null?' · ostatni udany odbiór z indeksu '+s.last_stream_index:' · niepotwierdzony na kamerze');
  document.getElementById('diag').textContent=JSON.stringify(s.live_diagnostics||{},null,2);
  document.getElementById('framing').textContent='Kadr: '+s.cyd_fit_mode+
     (s.cyd_fit_mode==='cover'?' · środek przycięcia '+s.cyd_focus_x+'%':'')+

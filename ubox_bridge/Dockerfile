@@ -1,4 +1,4 @@
-ARG BUILD_VERSION=0.5.7
+ARG BUILD_VERSION=0.5.8
 ARG BUILD_ARCH=amd64
 FROM ghcr.io/home-assistant/base:3.24
 ARG BUILD_VERSION
@@ -11,11 +11,11 @@ RUN apk add --no-cache python3 ffmpeg git ca-certificates build-base nodejs npm 
     && git -C /opt/ubox-web checkout --detach FETCH_HEAD \
     && cd /opt/ubox-web && npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
     && apk del build-base git
-COPY bridge.py frame_quality.py image_filters.py cloud_api.py capture_live.js /app/
+COPY bridge.py frame_quality.py image_filters.py video_profiles.py cloud_api.py capture_live.js /app/
 COPY run.sh /run.sh
 RUN node --check /app/capture_live.js \
     && node /app/capture_live.js --self-test \
     && node -e "require('/opt/ubox-web/ubox-live-stream.js')" \
-    && chmod 0755 /run.sh && python3 -m py_compile /app/bridge.py /app/frame_quality.py /app/image_filters.py /app/cloud_api.py
+    && chmod 0755 /run.sh && python3 -m py_compile /app/bridge.py /app/frame_quality.py /app/image_filters.py /app/video_profiles.py /app/cloud_api.py
 EXPOSE 8099 8100
 CMD ["/run.sh"]
