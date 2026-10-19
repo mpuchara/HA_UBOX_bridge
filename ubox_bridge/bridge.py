@@ -188,6 +188,10 @@ class CameraState:
                 "source_resolution": self.source_resolution,
                 "cyd_fit_mode": self.options.get("cyd_fit_mode", "blur"),
                 "cyd_focus_x": int(self.options.get("cyd_focus_x", 50)),
+                "cyd_wide_revision": (
+                    str(self.cyd_wide_image.stat().st_mtime_ns)
+                    if self.cyd_wide_image.is_file() else None
+                ),
                 "has_image": self.image.is_file() and self.image.stat().st_size > 0,
                 "has_cyd_image": self.cyd_image.is_file() and self.cyd_image.stat().st_size > 0,
                 "has_cyd_wide_image": self.cyd_wide_image.is_file() and self.cyd_wide_image.stat().st_size > 0,
@@ -583,7 +587,7 @@ nagłówek <code>X-UBox-Token</code> zamiast parametru w adresie.
 Nie udostępniaj tokenu poza domową siecią.</small></p>
 <button id="rotate">Wygeneruj nowy token</button></div>
 <script>
-let last='',busy=false;
+let last='',lastWide='',busy=false;
 async function refresh(){
 try{
  const response=await fetch('status',{cache:'no-store'});
@@ -607,7 +611,8 @@ try{
     (s.cyd_fit_mode==='cover'?' · środek przycięcia '+s.cyd_focus_x+'%':'')+
     ' · bez obrotu zdjęcia';
  document.getElementById('url').textContent='http://IP_HA:8100/snapshot-cyd-wide.jpg?token='+encodeURIComponent(s.snapshot_token);
- if(s.has_image&&last!==s.last_success){last=s.last_success;document.getElementById('image').src='snapshot.jpg?t='+Date.now();if(s.has_cyd_image)document.getElementById('cydimage').src='snapshot-cyd.jpg?t='+Date.now();if(s.has_cyd_wide_image)document.getElementById('wideimage').src='snapshot-cyd-wide.jpg?t='+Date.now()}
+ if(s.has_image&&last!==s.last_success){last=s.last_success;document.getElementById('image').src='snapshot.jpg?t='+Date.now();if(s.has_cyd_image)document.getElementById('cydimage').src='snapshot-cyd.jpg?t='+Date.now()}
+ if(s.has_cyd_wide_image&&lastWide!==s.cyd_wide_revision){lastWide=s.cyd_wide_revision;document.getElementById('wideimage').src='snapshot-cyd-wide.jpg?t='+Date.now()}
 }catch(e){document.getElementById('status').textContent='Nie można odczytać stanu dodatku.'}
 }
 async function action(route){const r=await fetch(route,{method:'POST'});if(!r.ok)alert('Akcja nie została wykonana (HTTP '+r.status+')');refresh()}
