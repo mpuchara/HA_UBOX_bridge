@@ -1,0 +1,43 @@
+name: Validate and package UBox Bridge
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  unit-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install --upgrade pyyaml
+      - run: python -m compileall -q ubox_bridge tests scripts
+      - run: python -m unittest discover -s tests -v
+      - run: python scripts/package.py
+      - name: Verify archive layout and hashes
+        shell: bash
+        run: |
+          set -eu
+          cd release
+          sha256sum -c SHA256SUMS.txt
+          unzip -l "$(find . -name '*-addon-root.zip' -print -quit)" | grep -q 'config.yaml'
+          unzip -l "$(find . -name '*-repository.zip' -print -quit)" | grep -q 'ubox_bridge/config.yaml'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ubox-bridge-install-packages
+          path: release/*
+  docker-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build x86_64 add-on image (ARM64 still requires Pi 4 validation)
+        run: docker build --build-arg BUILD_ARCH=amd64 --build-arg BUILD_VERSION=0.1.0 -t ubox-bridge:smoke ubox_bridge
+      - name: Check server startup and health
+        run: |
+          docker run -d --name ubox --publish 127.0.0.1:18100:8100 ubox-bridge:smoke
+          sleep 8
+          curl --fail http://127.0.0.1:18100/health
+          docker logs ubox
+          docker stop ubox
