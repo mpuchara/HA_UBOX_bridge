@@ -1,19 +1,27 @@
-ARG BUILD_VERSION=0.3.0
+ARG BUILD_VERSION=0.4.0
 ARG BUILD_ARCH=amd64
 FROM ghcr.io/home-assistant/base:3.24
 ARG BUILD_VERSION
 ARG BUILD_ARCH
 ARG UBOX_P4P_COMMIT=6f9f87fc31da4eb86531a81b08b3b1ffa4db5fa8
+ARG UBOX_WEB_COMMIT=c7787ec0c53b488797336799d9518bb3906d6d03
 LABEL io.hass.version="${BUILD_VERSION}" io.hass.type="app" io.hass.arch="${BUILD_ARCH}"
-RUN apk add --no-cache python3 py3-pip ffmpeg git ca-certificates build-base python3-dev linux-headers \
+RUN apk add --no-cache python3 py3-pip ffmpeg git ca-certificates build-base python3-dev linux-headers nodejs npm \
     && python3 -m venv /opt/ubox-venv \
     && git clone --filter=blob:none --no-checkout https://github.com/mahumadad/ubox-p4p.git /opt/ubox-p4p \
     && git -C /opt/ubox-p4p fetch --depth 1 origin "$UBOX_P4P_COMMIT" \
     && git -C /opt/ubox-p4p checkout --detach FETCH_HEAD \
     && /opt/ubox-venv/bin/pip install --no-cache-dir -r /opt/ubox-p4p/requirements.txt \
+    && git clone --filter=blob:none --no-checkout https://github.com/asyrk/ubox-web.git /opt/ubox-web \
+    && git -C /opt/ubox-web fetch --depth 1 origin "$UBOX_WEB_COMMIT" \
+    && git -C /opt/ubox-web checkout --detach FETCH_HEAD \
+    && cd /opt/ubox-web && npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
     && apk del build-base python3-dev linux-headers git
-COPY bridge.py cloud_api.py /app/
+COPY bridge.py cloud_api.py capture_live.js /app/
 COPY run.sh /run.sh
-RUN chmod 0755 /run.sh && python3 -m py_compile /app/bridge.py /app/cloud_api.py
+RUN node --check /app/capture_live.js \
+    && node /app/capture_live.js --self-test \
+    && node -e "require('/opt/ubox-web/ubox-live-stream.js')" \
+    && chmod 0755 /run.sh && python3 -m py_compile /app/bridge.py /app/cloud_api.py
 EXPOSE 8099 8100
 CMD ["/run.sh"]

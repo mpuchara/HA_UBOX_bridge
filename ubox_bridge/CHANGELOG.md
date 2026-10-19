@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0 — alternate real-time capture (experimental)
+
+- Independent Node UBox P4P implementation by asyrk/ubox-web pinned to a reviewed commit.
+- Dynamic discovery of camera relay endpoints, native-style wake and start-video sequence.
+- Decode received H.264/HEVC video frames into a cached JPEG 320×240 for Home Assistant and CYD.
+- Does NOT depend on cloud recording events or require a running Android app.
+- Optional direct one-shot live frame button, 45-second timeout by default.
+- Whitelisted diagnostic counters only, no upstream raw stream logs.
+- Hardware interoperability with XEGA XG-01-EU4G is not yet established.
+
+
 ## 0.3.0 — cloud-recording thumbnail fallback
 
 - Manual UBox cloud recording list query and latest event JPEG extraction.

@@ -1,5 +1,5 @@
 name: UBox Bridge
-version: "0.3.0"
+version: "0.4.0"
 slug: ubox_bridge
 description: Experimental UBox P4P snapshot bridge for Home Assistant and ESP32 CYD
 url: https://github.com/mpuchara/HA_UBOX_bridge
@@ -27,6 +27,7 @@ options:
   device_password: ""
   attempts: 3
   cloud_lookback_days: 7
+  live_timeout_seconds: 45
   interval_minutes: 0
   capture_on_start: false
 schema:
@@ -36,5 +37,6 @@ schema:
   device_password: password
   attempts: int(1,8)
   cloud_lookback_days: int(1,30)
+  live_timeout_seconds: int(10,75)
   interval_minutes: int(0,1440)
   capture_on_start: bool

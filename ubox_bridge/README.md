@@ -31,3 +31,19 @@ if it was shared accidentally. Old JPEG URLs stop working immediately.
 
 Images are fetched only from approved HTTPS cloud-storage domains,
 redirects are rejected, and only bounded JPEG data is accepted.
+
+## Alternate on-demand video snapshot (v0.4.0)
+
+Click **Zrób zdjęcie (nowy klient UBox)**. This starts a real video session
+via the independent [asyrk/ubox-web](https://github.com/asyrk/ubox-web)
+relay/P2P client (dynamic master discovery, wakeup, start-video control,
+KCP reassembly), then extracts a JPEG using FFmpeg. No persistent stream
+or Android relay is required. The app does not send a separate cloud
+"take photo" command because none is documented. Author notes this
+upstream software is unreviewed and experimental; compatibility with this
+specific XEGA LTE model is unconfirmed.
+
+Default max wait: `live_timeout_seconds: 45`. Stop at most one
+capture at a time and do not schedule frequent polling on a solar camera.
+The diagnostic block `live_diagnostics` is scrubbed of IPs, UIDs and
+authentication data. The temporary video file is removed after capture.
