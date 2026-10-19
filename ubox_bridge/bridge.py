@@ -280,23 +280,6 @@ class CameraState:
                 codec = self.live_diagnostics.get("codec") if self.live_diagnostics else None
                 if codec not in ("h264","hevc"):
                     raise RuntimeError("Nowy klient odebrał dane, ale nie rozpoznał kodeka.")
-                # Inspect the TRUE video resolution. Camera marketing resolution
-                # does not guarantee the P4P stream is delivered at 2K/HD.
-                source_resolution = None
-                try:
-                    probe = subprocess.run(
-                        [FFPROBE, "-v", "error", "-f", codec, "-i", str(raw),
-                         "-select_streams", "v:0", "-show_entries",
-                         "stream=width,height", "-of", "json"],
-                        capture_output=True, timeout=15, check=False,
-                    )
-                    streams = json.loads(probe.stdout.decode("utf-8")).get("streams", [])
-                    if streams:
-                        width, height = int(streams[0]["width"]), int(streams[0]["height"])
-                        if 0 < width <= 8192 and 0 < height <= 8192:
-                            source_resolution = f"{width}x{height}"
-                except (OSError, ValueError, IndexError, KeyError, subprocess.TimeoutExpired):
-                    pass
                 # A 320x240 image is used ONLY to score damage. Never convert
                 # it into the stored HA/CYD frame: that threw away HD details.
                 preview_pattern = str(Path(folder) / "candidate_%03d.ppm")
@@ -327,6 +310,23 @@ class CameraState:
                 )
                 if native.returncode or not jpeg.is_file() or not jpeg.stat().st_size:
                     raise RuntimeError("Nie udało się zapisać wybranej klatki w natywnej rozdzielczości.")
+                # Inspect the exported native JPEG, not just stream metadata.
+                # This reports the resolution actually saved into HA.
+                source_resolution = None
+                try:
+                    probe = subprocess.run(
+                        [FFPROBE, "-v", "error", "-i", str(jpeg),
+                         "-select_streams", "v:0", "-show_entries",
+                         "stream=width,height", "-of", "json"],
+                        capture_output=True, timeout=15, check=False,
+                    )
+                    streams = json.loads(probe.stdout.decode("utf-8")).get("streams", [])
+                    if streams:
+                        width, height = int(streams[0]["width"]), int(streams[0]["height"])
+                        if 0 < width <= 8192 and 0 < height <= 8192:
+                            source_resolution = f"{width}x{height}"
+                except (OSError, ValueError, IndexError, KeyError, subprocess.TimeoutExpired):
+                    pass
                 # Lanczos downsamples directly from the HD master.
                 # Cover + crop preserves geometry while filling a 240x320 LCD.
                 portrait = Path(folder) / "frame_cyd.jpg"

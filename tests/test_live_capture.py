@@ -60,7 +60,7 @@ class LiveCaptureTests(unittest.TestCase):
                 self.assertIn("2304x1296",json.dumps(status["live_diagnostics"]))
                 native_commands=[c for c in command_log if str(c[-1]).endswith("frame.jpg")]
                 self.assertEqual(len(native_commands),1)
-                self.assertIn("select=eq(n\\,0)", str(native_commands[0]))
+                self.assertIn("select=eq(n\\,0)", native_commands[0][native_commands[0].index("-vf")+1])
                 self.assertNotIn("scale=320",str(native_commands[0]))
                 resized_commands=[c for c in command_log if str(c[-1]).endswith("frame_cyd.jpg")]
                 self.assertEqual(len(resized_commands),1)
