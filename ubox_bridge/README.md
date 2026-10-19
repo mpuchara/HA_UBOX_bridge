@@ -36,3 +36,10 @@ zielonych obszarów). Jeśli paski występują także w panelu HA, problem
 najpewniej pochodzi z transmisji P4P. Jeżeli tylko na CYD, sprawdź
 firmware v0.2.2 z SPI 20 MHz. Uszkodzonych bajtów nie można odtworzyć
 bez otrzymania poprawnej klatki od kamery.
+
+## Portrait CYD v0.5.3
+
+The firmware v0.2.3+ downloads /snapshot-cyd.jpg (240×320, rotated 90° left).
+Existing /snapshot.jpg remains 320×240 for Generic Camera. Both use the
+same LAN token and support ETag/304; a new capture is needed after upgrade.
+The Ingress panel displays both previews. Cropping covers the entire CYD LCD.

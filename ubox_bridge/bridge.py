@@ -39,6 +39,7 @@ class CameraState:
     def __init__(self):
         DATA.mkdir(parents=True, exist_ok=True)
         self.image = DATA / "last.jpg"
+        self.cyd_image = DATA / "last_cyd.jpg"
         self.lock = threading.Lock()
         self.busy = False
         self.detecting = False
@@ -179,6 +180,7 @@ class CameraState:
                 "live_diagnostics": self.live_diagnostics,
                 "last_image_source": self.last_source,
                 "has_image": self.image.is_file() and self.image.stat().st_size > 0,
+                "has_cyd_image": self.cyd_image.is_file() and self.cyd_image.stat().st_size > 0,
                 "interval_minutes": int(self.options.get("interval_minutes", 0)),
             }
 
@@ -275,8 +277,8 @@ class CameraState:
                 subprocess.run(
                     [FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
                      "-threads", "2", "-f", codec, "-i", str(raw),
-                     "-vf", "fps=6,scale=320:240:force_original_aspect_ratio=decrease,"
-                            "pad=320:240:(ow-iw)/2:(oh-ih)/2",
+                     "-vf", "fps=6,scale=320:240:force_original_aspect_ratio=increase,"
+                            "crop=320:240",
                      "-vsync", "0", "-frames:v", "18", candidate_pattern],
                     capture_output=True, timeout=45, check=False,
                 )
@@ -289,14 +291,19 @@ class CameraState:
                         self.live_diagnostics["snapshot_quality"] = metrics
                 LOG.info("Snapshot selection: %d candidates, green %.3f, stripes %.3f",
                          len(candidates), metrics["green_fraction"], metrics["stripe_score"])
-                ff = subprocess.run(
-                    [FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
-                     "-i", str(best), "-frames:v", "1",
-                     "-pix_fmt", "yuvj420p", "-q:v", "4", str(jpeg)],
-                    capture_output=True, timeout=25, check=False,
-                )
-                if ff.returncode or not jpeg.is_file() or not jpeg.stat().st_size:
-                    raise RuntimeError("Wybrano klatkę, ale FFmpeg nie przygotował JPEG.")
+                # Two independent JPEGs: HA landscape and pre-rotated portrait CYD.
+                portrait = Path(folder) / "frame_cyd.jpg"
+                for output, vf in ((jpeg, None), (portrait, "transpose=2")):
+                    cmd = [FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
+                           "-i", str(best)]
+                    if vf:
+                        cmd += ["-vf", vf]
+                    cmd += ["-frames:v", "1", "-pix_fmt", "yuvj420p",
+                            "-q:v", "4", str(output)]
+                    ff = subprocess.run(cmd, capture_output=True, timeout=25, check=False)
+                    if ff.returncode or not output.is_file() or not output.stat().st_size:
+                        raise RuntimeError("FFmpeg nie przygotował JPEG dla HA/CYD.")
+                os.replace(portrait, self.cyd_image)
                 os.replace(jpeg, self.image)
             self.publish_metadata("live_alt")
             LOG.info("Live stream snapshot saved (%d bytes)", self.image.stat().st_size)
@@ -320,7 +327,7 @@ STATE: CameraState | None = None
 
 
 class ApiHandler(BaseHTTPRequestHandler):
-    server_version = "UBoxBridge/0.5.2"
+    server_version = "UBoxBridge/0.5.3"
 
     def log_message(self, fmt, *args):
         # Never log URLs or query strings containing the snapshot token.
@@ -364,24 +371,25 @@ class ApiHandler(BaseHTTPRequestHandler):
                 self.respond(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
             elif route == "/status":
                 self.json_response(200, {**STATE.status(), "snapshot_token": STATE.token})
-            elif route == "/snapshot.jpg":
-                self.snapshot()
+            elif route in ("/snapshot.jpg", "/snapshot-cyd.jpg"):
+                self.snapshot(portrait=route == "/snapshot-cyd.jpg")
             else:
                 self.respond(404, b"Not found", "text/plain")
             return
         if route == "/health":
             self.json_response(200, {"ok": True})
-        elif route in ("/snapshot.jpg", "/snapshot-meta.json"):
+        elif route in ("/snapshot.jpg", "/snapshot-cyd.jpg", "/snapshot-meta.json"):
             if not self.valid_token():
                 self.respond(401, b"Token required", "text/plain")
                 return
-            if route == "/snapshot.jpg":
-                self.snapshot()
+            if route in ("/snapshot.jpg", "/snapshot-cyd.jpg"):
+                self.snapshot(portrait=route == "/snapshot-cyd.jpg")
             else:
                 # No session secrets, UID, IP or account details.
                 status = STATE.status()
                 self.json_response(200, {
                     "has_image": status["has_image"],
+                    "has_cyd_image": status["has_cyd_image"],
                     "last_success": status["last_success"],
                     "capturing": status["capturing"],
                     "interval_minutes": status["interval_minutes"],
@@ -390,10 +398,11 @@ class ApiHandler(BaseHTTPRequestHandler):
         else:
             self.respond(404, b"Not found", "text/plain")
 
-    def snapshot(self):
+    def snapshot(self, portrait=False):
         assert STATE is not None
+        file_path = STATE.cyd_image if portrait else STATE.image
         try:
-            stats = STATE.image.stat()
+            stats = file_path.stat()
             if not stats.st_size:
                 raise FileNotFoundError()
             # ETag enables cheap CYD polls; the old image remains during capture.
@@ -404,7 +413,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()
                 return
-            content = STATE.image.read_bytes()
+            content = file_path.read_bytes()
         except FileNotFoundError:
             self.respond(503, b"No image captured yet", "text/plain")
             return
@@ -445,10 +454,11 @@ body{font:16px system-ui;background:#121825;color:#f3f4f6;max-width:760px;margin
 h1{font-size:1.8rem}h3{margin-top:0}.card{background:#202a3c;padding:1.2rem;margin:1rem 0;border-radius:12px}
 button{background:#5bbcff;color:#092034;border:0;border-radius:8px;padding:.8rem;margin:.15rem;font-weight:700;cursor:pointer}
 button:disabled{opacity:.45}img{display:block;width:100%;max-width:560px;aspect-ratio:4/3;object-fit:contain;background:black;border-radius:8px}
+#cydimage{max-width:240px;aspect-ratio:3/4}
 code,pre{overflow-wrap:anywhere;white-space:pre-wrap;color:#a6eeac}
 .err{color:#ffaaaa}.muted{color:#b5c0cf}small{line-height:1.6}
 </style></head><body>
-<h1>📷 UBox Bridge</h1><p>XEGA 4G → zdjęcie na żywo → JPEG 320×240 → Home Assistant / CYD</p>
+<h1>📷 UBox Bridge</h1><p>XEGA 4G → zdjęcie na żywo → JPEG 320×240 → HA · JPEG 240×320 → CYD</p>
 <div class="card"><h3>Automatyczne zdjęcia</h3>
 <p id="status">Wczytywanie…</p><p id="err" class="err"></p>
 <p><b id="interval"></b></p>
@@ -463,6 +473,8 @@ CYD jedynie sprawdza zapisany JPEG — nie wybudza kamery.</small></p>
 <div class="card"><h3>Ostatnia klatka</h3>
 <img id="image" alt="Ostatnia klatka">
 <p id="stamp" class="muted">Brak obrazu</p></div>
+<div class="card"><h3>Podgląd CYD (240×320, obrót o 90° w lewo)</h3>
+<img id="cydimage" alt="Widok przygotowany dla CYD"></div>
 <div class="card"><h3>CYD / sieć lokalna</h3>
 <p>CYD pobiera zdjęcie np. co 30 sekund, lecz transferuje JPEG tylko wtedy,
 gdy powstała nowa klatka (nagłówek ETag / HTTP 304).</p>
@@ -491,8 +503,8 @@ try{
  ' (…'+d.uid_suffix+')'+(d.has_device_password?' — dostępna':' — brak hasła P2P')).join(' | ');
  document.getElementById('stamp').textContent=s.last_success||'Brak zdjęcia';
  document.getElementById('diag').textContent=JSON.stringify(s.live_diagnostics||{},null,2);
- document.getElementById('url').textContent='http://IP_HA:8100/snapshot.jpg?token='+encodeURIComponent(s.snapshot_token);
- if(s.has_image&&last!==s.last_success){last=s.last_success;document.getElementById('image').src='snapshot.jpg?t='+Date.now()}
+ document.getElementById('url').textContent='http://IP_HA:8100/snapshot-cyd.jpg?token='+encodeURIComponent(s.snapshot_token);
+ if(s.has_image&&last!==s.last_success){last=s.last_success;document.getElementById('image').src='snapshot.jpg?t='+Date.now();if(s.has_cyd_image)document.getElementById('cydimage').src='snapshot-cyd.jpg?t='+Date.now()}
 }catch(e){document.getElementById('status').textContent='Nie można odczytać stanu dodatku.'}
 }
 async function action(route){const r=await fetch(route,{method:'POST'});if(!r.ok)alert('Akcja nie została wykonana (HTTP '+r.status+')');refresh()}

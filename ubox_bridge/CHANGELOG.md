@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.3 — fullscreen portrait CYD
+
+- Token-protected 240×320 /snapshot-cyd.jpg, pre-rotated 90° left on Raspberry Pi.
+- Cover and center-crop 16:9 video to the 4:3 LCD source without black letterboxing.
+- Preserve landscape /snapshot.jpg for HA and compare original/portrait in Ingress panel.
+- CYD v0.2.3 draws JPEG MCU blocks directly; cached HA image and authentication unchanged.
+- Re-capture a still after upgrade to generate /snapshot-cyd.jpg.
+
 ## 0.5.2 — less corrupted P4P snapshots
 
 - Buffer more UBox video frames before closing relay session to avoid incomplete first frames.
