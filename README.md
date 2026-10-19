@@ -120,3 +120,13 @@ default, even for existing saved options with \`stream_index: 0\`. Use
 panel after a successful photo; HD is **requested, not guaranteed**.
 Failure retains the old cached still and does not automatically retry SD.
 No firmware change to CYD or new JPEG URL is needed.
+
+## PTZ gestures (bridge v0.5.9 + CYD v0.2.6)
+
+Experimental swipe-to-move support: a CYD gesture sends a token-authenticated
+LAN POST /ptz to bridge with fixed direction only. The bridge opens a P4P
+session, sends a short movement + STOP, then captures a **fresh** screenshot
+using a second session. Ingress provides arrow buttons for diagnostics. This
+is not continuous video and is not hardware-confirmed on this XEGA firmware.
+Only the already-authorized camera can be moved; avoid public exposure of
+port 8100. Old CYD firmware remains able to display stills.

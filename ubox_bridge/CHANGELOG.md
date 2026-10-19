@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.9 — touch swipe PTZ endpoint
+
+- Add authenticated LAN POST /ptz (header X-UBox-Token required), plus Ingress arrow buttons.
+- Send one bounded 420 ms movement using pinned P4P library IOCTRL 0x1001, then STOP in a finally handler. Hardware movement remains experimental on XEGA.
+- Following successful command delivery, open a NEW stream and refresh the cached HA/CYD JPEG (avoids returning pre-motion buffered frames).
+- Reject overlapping jobs and rapid commands, preserve previous JPEG on errors; never log device credentials or arbitrary client IOCTRL payloads.
+- Firmware 0.2.6+ uses XPT2046 swipes to trigger these commands; same JPEG endpoint, login and Wi-Fi settings.
+
 ## 0.5.8 — request UBox HD video instead of SD
 
 - UBox P4P streamIndex=0 requests SD, streamIndex=1 requests HD, according to the ubox_camera_api documentation (device support not guaranteed).

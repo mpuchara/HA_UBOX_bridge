@@ -108,3 +108,16 @@ read the **actual saved resolution** in the Ingress panel. A request for HD
 is not proof of a HD stream. If HD capture fails, the last good SD snapshot
 will remain cached; you can change the profile to SD and restart, without
 forcing retries that would drain the LTE camera.
+
+## Swipe to move (0.5.9, experimental)
+
+POST `http://IP_HA:8100/ptz` with header `X-UBox-Token: TOKEN`,
+JSON `{"direction":"left"}` (or right/up/down), on a trusted LAN only.
+Each request starts a **single 420 ms movement**, explicitly sends STOP,
+then uses a new live video session to capture the *post-movement* frame.
+This is intentionally slower than live PTZ but safe for a solar camera.
+The pinned upstream implements IOCTRL 0x1001 but actual motor response on
+XEGA XG-01-EU4G still requires a physical test. Rejects concurrent actions
+and cooldown <5s; does not permit arbitrary P4P IOCTRL or device IDs.
+The LAN token grants camera motion as well as snapshot reads: keep it secret
+and don't forward TCP 8100 on the router.

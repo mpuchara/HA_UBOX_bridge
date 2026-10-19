@@ -46,6 +46,10 @@ class CameraState:
         self.cyd_wide_image = DATA / "last_cyd_wide.jpg"
         self.lock = threading.Lock()
         self.busy = False
+        self.ptz_running = False
+        self.last_ptz_command = None
+        self.last_ptz_error = None
+        self.last_ptz_at = 0.0
         self.detecting = False
         self.detected_devices = []
         self.discovery_at = 0
@@ -182,6 +186,9 @@ class CameraState:
                 "configured": self.configured,
                 "account_configured": self.account_configured,
                 "capturing": self.busy,
+                "ptz_running": self.ptz_running,
+                "last_ptz_command": self.last_ptz_command,
+                "last_ptz_error": self.last_ptz_error,
                 "detecting": self.detecting,
                 "discovery_error": self.discovery_error,
                 "devices": [device.public() for device in self.detected_devices],
@@ -219,6 +226,71 @@ class CameraState:
             self.last_attempt = utc_now()
         threading.Thread(target=self.capture_live_alt, daemon=True).start()
         return True, "Odbiór nowej klatki rozpoczęty."
+
+    def trigger_ptz(self, direction: str) -> tuple[int, str]:
+        """One short movement + stop + fresh snapshot; never overlap captures."""
+        if direction not in ("up", "down", "left", "right"):
+            return 400, "Nieznany kierunek ruchu."
+        if not self.configured:
+            return 409, "Skonfiguruj UBox przed sterowaniem PTZ."
+        with self.lock:
+            if self.busy or self.ptz_running:
+                return 409, "Trwa już ruch lub pobieranie obrazu."
+            if time.monotonic() - self.last_ptz_at < 5:
+                return 429, "Odczekaj kilka sekund pomiędzy ruchami."
+            self.busy = True
+            self.ptz_running = True
+            self.last_ptz_at = time.monotonic()
+            self.last_ptz_command = direction
+            self.last_ptz_error = None
+            self.last_error = None
+        threading.Thread(target=self.move_then_capture, args=(direction,), daemon=True).start()
+        return 202, "Ruch w kolejce; po zatrzymaniu kamera wyśle nową klatkę."
+
+    def move_then_capture(self, direction: str):
+        """Use a temporary P4P session, then a NEW session to ensure post-PTZ frame."""
+        try:
+            quality, index = video_profile(self.options)
+            uid, password = self.resolve_camera()
+            env = os.environ.copy()
+            env.update({
+                "UBOX_UID": uid,
+                "UBOX_PASSWORD": password,
+                "UBOX_PTZ_DIRECTION": direction,
+                "UBOX_PTZ_MS": "420",
+                "UBOX_STREAM_INDEX": str(index),
+            })
+            process = subprocess.run(
+                [NODE_EXECUTABLE, "/app/ptz_move.js"],
+                cwd="/app", env=env, capture_output=True,
+                timeout=35, check=False,
+            )
+            try:
+                response = json.loads(process.stdout.decode("utf-8", "replace"))
+            except (ValueError, UnicodeDecodeError):
+                response = {}
+            if process.returncode or response.get("ok") is not True:
+                raise RuntimeError("Sterowanie PTZ nie zostało zaakceptowane przez transport P4P.")
+            # The command has only been sent; no hardware ACK is guaranteed.
+            LOG.info("PTZ short move sent (%s), camera frame refresh requested", direction)
+            with self.lock:
+                self.ptz_running = False
+            # Capture uses its OWN fresh stream to avoid returning a pre-movement
+            # buffered keyframe. It owns busy cleanup in its finally block.
+            self.capture_live_alt()
+            return
+        except subprocess.TimeoutExpired:
+            error = "Upłynął czas oczekiwania na ruch PTZ."
+        except (RuntimeError, OSError, ValueError):
+            error = "PTZ niedostępny: sesja P4P nie przyjęła polecenia."
+        except Exception:
+            error = "Nieoczekiwany błąd sterowania PTZ."
+        with self.lock:
+            self.last_ptz_error = error
+            self.last_error = error
+            self.ptz_running = False
+            self.busy = False
+        LOG.warning("%s", error)
 
     def publish_metadata(self, source="live_alt", source_resolution=None, stream_index=None):
         tmp = DATA / "last_metadata.new"
@@ -428,7 +500,7 @@ STATE: CameraState | None = None
 
 
 class ApiHandler(BaseHTTPRequestHandler):
-    server_version = "UBoxBridge/0.5.8"
+    server_version = "UBoxBridge/0.5.9"
 
     def log_message(self, fmt, *args):
         # Never log URLs or query strings containing the snapshot token.
@@ -498,6 +570,8 @@ class ApiHandler(BaseHTTPRequestHandler):
                     "last_stream_index": status["last_stream_index"],
                     "last_success": status["last_success"],
                     "capturing": status["capturing"],
+                    "ptz_running": status["ptz_running"],
+                    "last_ptz_error": status["last_ptz_error"],
                     "interval_minutes": status["interval_minutes"],
                     "last_error": status["last_error"],
                 })
@@ -541,10 +615,47 @@ class ApiHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         assert STATE is not None
+        route = urlsplit(self.path).path
+        # Dedicated LAN port exposes ONLY the fixed PTZ action and requires
+        # a secret in X-UBox-Token (never a URL query parameter for writes).
+        if self.server.server_port == SNAPSHOT_PORT and route == "/ptz":
+            if not hmac.compare_digest(self.headers.get("X-UBox-Token", ""), STATE.token):
+                self.respond(401, b"Token required", "text/plain")
+                return
+            size_text = self.headers.get("Content-Length", "")
+            if not size_text.isdecimal() or not (1 <= int(size_text) <= 96):
+                self.respond(400, b"Invalid body size", "text/plain")
+                return
+            try:
+                payload = json.loads(self.rfile.read(int(size_text)))
+            except (ValueError, UnicodeDecodeError):
+                self.respond(400, b"Invalid JSON", "text/plain")
+                return
+            if not isinstance(payload, dict) or set(payload.keys()) != {"direction"}:
+                self.respond(400, b"Invalid PTZ command", "text/plain")
+                return
+            code, message = STATE.trigger_ptz(payload["direction"])
+            self.json_response(code, {"accepted": code == 202, "message": message})
+            return
         if not self.allowed_ingress():
             self.respond(403, b"Forbidden", "text/plain")
             return
-        route = urlsplit(self.path).path
+        if route == "/ptz":
+            size_text = self.headers.get("Content-Length", "")
+            if not size_text.isdecimal() or not (1 <= int(size_text) <= 96):
+                self.respond(400, b"Invalid body size", "text/plain")
+                return
+            try:
+                payload = json.loads(self.rfile.read(int(size_text)))
+            except (ValueError, UnicodeDecodeError):
+                self.respond(400, b"Invalid JSON", "text/plain")
+                return
+            if not isinstance(payload, dict) or set(payload.keys()) != {"direction"}:
+                self.respond(400, b"Invalid PTZ command", "text/plain")
+                return
+            code, message = STATE.trigger_ptz(payload["direction"])
+            self.json_response(code, {"accepted": code == 202, "message": message})
+            return
         if route in ("/capture", "/live-capture"):
             accepted, message = STATE.trigger()
         elif route == "/discover":
@@ -574,6 +685,9 @@ code,pre{overflow-wrap:anywhere;white-space:pre-wrap;color:#a6eeac}
 <p><b id="interval"></b></p>
 <button id="capture">Zrób nowe zdjęcie teraz</button>
 <button id="discover">Wykryj kamerę</button>
+<p class="muted">Sterowanie PTZ (eksperymentalne): jedna krótka komenda, STOP i nowe zdjęcie.</p>
+<div><button class="ptz" data-dir="left">←</button><button class="ptz" data-dir="up">↑</button><button class="ptz" data-dir="down">↓</button><button class="ptz" data-dir="right">→</button></div>
+<p id="ptzstatus" class="muted" aria-live="polite"></p>
 <p id="devices" class="muted"></p>
 <p><small>Odstęp między zdjęciami zmienisz w <b>Konfiguracji dodatku</b>, pole
 <code>interval_minutes</code>. Przy wartości 0 automatyczne zdjęcia są wyłączone.
@@ -620,6 +734,8 @@ try{
  'Automatyczne zdjęcia: wyłączone (interval_minutes=0)';
  document.getElementById('capture').disabled=!s.configured||s.capturing;
  document.getElementById('discover').disabled=!s.account_configured||s.detecting;
+ document.querySelectorAll(".ptz").forEach(b=>b.disabled=!s.configured||s.capturing);
+ document.getElementById("ptzstatus").textContent=s.ptz_running?"Kamera wykonuje ruch…":(s.last_ptz_error||"Dotknij kierunku, aby przesunąć i odświeżyć kadr.");
  document.getElementById('devices').textContent=s.devices.map(d=>d.name+
  ' (…'+d.uid_suffix+')'+(d.has_device_password?' — dostępna':' — brak hasła P2P')).join(' | ');
  document.getElementById('stamp').textContent=s.last_success||'Brak zdjęcia';
@@ -639,6 +755,10 @@ try{
 async function action(route){const r=await fetch(route,{method:'POST'});if(!r.ok)alert('Akcja nie została wykonana (HTTP '+r.status+')');refresh()}
 document.getElementById('capture').onclick=()=>action('capture');
 document.getElementById('discover').onclick=()=>action('discover');
+document.querySelectorAll(".ptz").forEach(b=>b.onclick=async()=>{
+ const r=await fetch('ptz',{method:'POST',headers:{"Content-Type":"application/json"},body:JSON.stringify({direction:b.dataset.dir})});
+ if(!r.ok)alert("PTZ: "+r.status); refresh();
+});
 document.getElementById('rotate').onclick=()=>{if(confirm('Stary adres CYD przestanie działać. Zmienić token?'))action('rotate-token')};
 refresh();setInterval(refresh,4000);
 </script></body></html>'''
