@@ -187,6 +187,8 @@ class CameraState:
                 "account_configured": self.account_configured,
                 "capturing": self.busy,
                 "ptz_running": self.ptz_running,
+                "ptz_pulse_ms": int(self.options.get("ptz_pulse_ms", 100)),
+                "ptz_speed": int(self.options.get("ptz_speed", 1)),
                 "last_ptz_command": self.last_ptz_command,
                 "last_ptz_error": self.last_ptz_error,
                 "detecting": self.detecting,
@@ -256,7 +258,8 @@ class CameraState:
                 "UBOX_UID": uid,
                 "UBOX_PASSWORD": password,
                 "UBOX_PTZ_DIRECTION": direction,
-                "UBOX_PTZ_MS": "420",
+                "UBOX_PTZ_MS": str(max(60,min(350,int(self.options.get("ptz_pulse_ms",100))))),
+                "UBOX_PTZ_SPEED": str(max(1,min(8,int(self.options.get("ptz_speed",1))))),
                 # PTZ does not require HD: use the proven SD P4P profile
                 # for short motor commands. Fresh capture still requests HD.
                 "UBOX_STREAM_INDEX": "0",
@@ -264,7 +267,7 @@ class CameraState:
             process = subprocess.run(
                 [NODE_EXECUTABLE, "/app/ptz_move.js"],
                 cwd="/app", env=env, capture_output=True,
-                timeout=35, check=False,
+                timeout=55, check=False,
             )
             try:
                 response = json.loads(process.stdout.decode("utf-8", "replace"))
@@ -501,7 +504,7 @@ STATE: CameraState | None = None
 
 
 class ApiHandler(BaseHTTPRequestHandler):
-    server_version = "UBoxBridge/0.5.10"
+    server_version = "UBoxBridge/0.5.11"
 
     def log_message(self, fmt, *args):
         # Never log URLs or query strings containing the snapshot token.
@@ -686,7 +689,8 @@ code,pre{overflow-wrap:anywhere;white-space:pre-wrap;color:#a6eeac}
 <p><b id="interval"></b></p>
 <button id="capture">Zrób nowe zdjęcie teraz</button>
 <button id="discover">Wykryj kamerę</button>
-<p class="muted">Sterowanie PTZ (eksperymentalne): jedna krótka komenda, STOP i nowe zdjęcie.</p>
+<p class="muted">Sterowanie PTZ (eksperymentalne): krótki impuls, STOP i nowe zdjęcie.</p>
+<p id="ptzsettings" class="muted">Impuls: 100 ms, prędkość: 1</p>
 <div><button class="ptz" data-dir="left">←</button><button class="ptz" data-dir="up">↑</button><button class="ptz" data-dir="down">↓</button><button class="ptz" data-dir="right">→</button></div>
 <p id="ptzstatus" class="muted" aria-live="polite"></p>
 <p id="devices" class="muted"></p>
@@ -737,6 +741,7 @@ try{
  document.getElementById('discover').disabled=!s.account_configured||s.detecting;
  document.querySelectorAll(".ptz").forEach(b=>b.disabled=!s.configured||s.capturing);
  document.getElementById("ptzstatus").textContent=s.ptz_running?"Kamera wykonuje ruch…":(s.last_ptz_error||"Dotknij kierunku, aby przesunąć i odświeżyć kadr.");
+ document.getElementById("ptzsettings").textContent="Impuls: "+s.ptz_pulse_ms+" ms; prędkość: "+s.ptz_speed+" (zmień w konfiguracji dodatku)";
  document.getElementById('devices').textContent=s.devices.map(d=>d.name+
  ' (…'+d.uid_suffix+')'+(d.has_device_password?' — dostępna':' — brak hasła P2P')).join(' | ');
  document.getElementById('stamp').textContent=s.last_success||'Brak zdjęcia';

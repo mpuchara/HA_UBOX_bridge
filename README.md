@@ -143,3 +143,12 @@ already displayed the camera correctly. **Upgrade bridge first** to 0.5.10.
 PTZ may not work on all XEGA firmware; requires live device verification.
 Snapshot token now authorizes PTZ movement too — protect it and keep
 port 8100 on LAN only.
+
+## PTZ corrected small-step motion (0.5.11)
+
+Set `ptz_pulse_ms: 100` (range 60–350) and `ptz_speed: 1` (range 1–8)
+in addon options. This fixes a reverse-engineered IOCTRL PTZ field-layout
+regression: speed at byte 2, direction at byte 5 and all-zero STOP.
+Prior implementation used an incorrect third-party format; this could
+cause both left/right swipes to move only left and oversized movements.
+Firmware **CYD 0.2.6 stays unchanged**; upgrade addon only.

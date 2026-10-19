@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.11 — fix incorrect PTZ motion and overshoot
+
+- Fix 12-byte PTZ IOCTRL 0x1001: **byte[2]=speed**, **byte[5]=direction**, other bytes zero; previous upstream library used byte[6]=8 and byte[10]=speed. Independent empirically verified protocol reference: [mahumadad/ubox-p4p IOCTRLS.md](https://github.com/mahumadad/ubox-p4p/blob/main/docs/IOCTRLS.md).
+- Default motion duration reduced from 420ms to **100ms**; minimum speed 1, with full zero-filled STOP payload, then allow 180ms transport flush before disconnect.
+- New add-on options: `ptz_pulse_ms` (60–350; default 100) and `ptz_speed` (1–8; default 1). Existing configurations use these defaults without migration. No CYD firmware flash needed.
+- Local Node self-test verifies all four directional wire payloads, STOP, exception cleanup and duration limits. Ingress panel reports active pulse settings.
+- Still experimental on XEGA firmware. If significant movement remains at 100ms/1, reduce pulse to 60ms; do not assume instant motor STOP on LTE camera.
+
 ## 0.5.10 — full PTZ/CYD gesture release
 
 - Final release of swipe-to-move control with token-protected PTZ API, short movement + STOP, then fresh JPEG capture.

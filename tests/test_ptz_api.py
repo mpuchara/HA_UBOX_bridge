@@ -76,7 +76,8 @@ class PtZApiTests(unittest.TestCase):
                 self.assertEqual(captured,[(True,False)])
                 env=cmd.call_args.kwargs["env"]
                 self.assertEqual(env["UBOX_PTZ_DIRECTION"],"left")
-                self.assertEqual(env["UBOX_PTZ_MS"],"420")
+                self.assertEqual(env["UBOX_PTZ_MS"],"100")
+                self.assertEqual(env["UBOX_PTZ_SPEED"],"1")
                 self.assertNotIn("pw",str(st.status()))
 
 if __name__=="__main__":

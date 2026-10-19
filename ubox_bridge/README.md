@@ -121,3 +121,19 @@ XEGA XG-01-EU4G still requires a physical test. Rejects concurrent actions
 and cooldown <5s; does not permit arbitrary P4P IOCTRL or device IDs.
 The LAN token grants camera motion as well as snapshot reads: keep it secret
 and don't forward TCP 8100 on the router.
+
+## PTZ correctness and small steps — v0.5.11
+
+The previous third-party UBox library mapped PTZ fields incorrectly for
+this camera's 12-byte IOCTRL 0x1001. Our bridge now constructs a verified
+wire format directly: speed at byte 2, direction at byte 5, remaining bytes
+all zero. Direction codes: up 1, down 2, right 3, left 6, stop 0.
+After the movement it sends an all-zero STOP and flushes transport before
+closing the session. See empirical packet documentation:
+https://github.com/mahumadad/ubox-p4p/blob/main/docs/IOCTRLS.md
+
+Defaults are conservative: `ptz_pulse_ms: 100` and `ptz_speed: 1`.
+Optional 60–350ms duration and 1–8 speed are configured in HA add-on
+options. For solar LTE cameras test small steps first. The physical motor
+response still varies by XEGA firmware and has not been measured remotely.
+**No CYD reflash** required — firmware 0.2.6 swipe-to-POST is unchanged.

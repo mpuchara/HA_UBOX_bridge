@@ -1,5 +1,5 @@
 name: UBox Bridge
-version: "0.5.10"
+version: "0.5.11"
 slug: ubox_bridge
 description: On-demand and periodic live snapshots for UBox LTE cameras, HA and ESP32 CYD
 url: https://github.com/mpuchara/HA_UBOX_bridge
@@ -33,6 +33,8 @@ options:
   cyd_fit_mode: blur
   cyd_focus_x: 50
   capture_on_start: false
+  ptz_pulse_ms: 100
+  ptz_speed: 1
 schema:
   account_email: str
   account_password: password
@@ -46,3 +48,5 @@ schema:
   cyd_fit_mode: str
   cyd_focus_x: int(0,100)
   capture_on_start: bool
+  ptz_pulse_ms: int(60,350)
+  ptz_speed: int(1,8)
