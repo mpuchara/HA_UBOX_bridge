@@ -57,3 +57,12 @@ Zaktualizuj UBox Bridge do 0.5.3, zrób nowe zdjęcie. Wgraj CYD 0.2.3.
 Wyszukaj sieć Wi-Fi **CYD** i wpisz ośmioznakowe losowe hasło z LCD.
 Panel konfiguracji: `http://192.168.4.1`. Dane sieci domowej i token HA
 zapisują się w NVS, o ile przy flashowaniu nie wybrano kasowania pamięci.
+
+## v0.2.4 — ułożenie montażowe CYD
+
+**Najpierw UBox Bridge 0.5.5 i nowe zdjęcie.** Wgraj firmware 0.2.4.
+Ułóż CYD poziomo z USB przy prawym dolnym rogu. Domyślny obrót LCD: 3;
+krótkie naciśnięcie BOOT przełącza 1 ↔ 3, gdyby montaż odwrócił tekst.
+Dłuższe BOOT (5 s) resetuje konfigurację Wi-Fi i HA.
+AP `CYD`, hasło `12345678` (łatwe do odgadnięcia, tylko na czas konfiguracji).
+W chwili uruchamiania sprawdź pola testowe LCD, niezależne od obrazu kamery.

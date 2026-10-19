@@ -1,3 +1,34 @@
+# UBox CYD Monitor v0.2.4 — poziomo, USB po prawej u dołu
+
+[Instalator USB przez Chrome/Edge](https://mpuchara.github.io/HA_UBOX_bridge/) lub pakiet instalatora Windows z Releases.
+
+**Wymaga dodatku UBox Bridge 0.5.5+**. Po aktualizacji dodatku wykonaj
+przynajmniej jedno nowe zdjęcie z kamery, aby utworzyć `/snapshot-cyd-wide.jpg`.
+
+CYD wyświetla w **320×240 poziomo**. Montuj go tak, aby przewód USB
+wychodził w **prawej dolnej części**. Domyślnie sterownik LCD używa
+`setRotation(3)`. Jeśli obraz wyjdzie do góry nogami, **naciśnij BOOT krótko**,
+aby przełączyć na `setRotation(1)`. Wybrane ustawienie pozostaje zapisane
+po restarcie. Przytrzymanie BOOT przez 5 sekund resetuje ustawienia połączenia.
+
+Podczas włączania przez około 1,6 s widać cztery kolorowe pola testowe:
+czerwone/zielone/niebieskie/białe. Jeżeli białe lub zaszumione pasy
+pojawiają się już na polach testowych czy w komunikacie Wi-Fi, problem
+nie pochodzi z obrazu UBox — sprawdź ekran, zasilanie i SPI.
+Prędkość SPI zmniejszono do 10 MHz na potrzeby diagnostyki.
+
+Sieć konfiguracyjna: `CYD`, hasło: `12345678`.
+To celowo proste, **łatwe do odgadnięcia** hasło. Uruchamiaj tę sieć
+tylko na czas konfiguracji, w zaufanym miejscu.
+Otwórz `http://192.168.4.1` i podaj Wi-Fi 2.4 GHz, IP Raspberry Pi oraz token.
+Po połączeniu z domową siecią AP przestaje działać.
+
+CYD pobiera wyłącznie buforowany JPEG 320×240 z HA, nie łączy się
+z LTE i nie budzi kamerki. Odpytuje co 30 s, używa ETag/304.
+Token oraz konfiguracja Wi-Fi przechowywane są w NVS, nigdy w repozytorium.
+
+## Historia i wcześniejsze warianty
+
 # UBox CYD Monitor — instalator przez przeglądarkę
 
 **Najłatwiej:** otwórz https://mpuchara.github.io/HA_UBOX_bridge/
@@ -11,7 +42,7 @@ hasło. Połącz telefon z hotspotem, wejdź na `http://192.168.4.1`,
 wybierz Wi-Fi 2.4 GHz oraz wpisz IP Raspberry Pi z HA (bez portu)
 i token UBox Bridge. Ustawienia zapiszą się w NVS ESP32.
 
-Obraz z HA 320×240 jest obracany o 90° w lewo i wyświetlany na całym ekranie CYD 240×320. SPI wyświetlacza działa z 27 MHz, aby ograniczyć artefakty transmisji.\n\nCYD odpyta HA co 30 sekund. Gdy JPEG się nie zmienił, HA odpowie HTTP
+Obraz z HA 320×240 jest obracany o 90° w lewo i wyświetlany na całym ekranie CYD 240×320. CYD odpyta HA co 30 sekund. Gdy JPEG się nie zmienił, HA odpowie HTTP
 304; sam odczyt zdjęcia nie uruchamia transmisji LTE.
 Pobieranie świeżej klatki ustaw w dodatku HA `interval_minutes`.
 

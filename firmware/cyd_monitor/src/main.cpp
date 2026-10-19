@@ -10,12 +10,13 @@
 #include <memory>
 #include <new>
 
-// CYD ESP32-2432S028 (ILI9341, 2.8", 240x320 portrait).
+// CYD ESP32-2432S028 (ILI9341, 2.8", landscape 320x240).
 // Configuration is stored in ESP32 NVS, NEVER compiled into the firmware.
 static constexpr int TFT_BACKLIGHT_PIN = 21;
 static constexpr int BOOT_BUTTON_PIN = 0;
 static constexpr unsigned long REFRESH_MS = 30000UL;
 static constexpr size_t MAX_JPEG_BYTES = 100 * 1024;
+static constexpr uint8_t DEFAULT_SCREEN_ROTATION = 3; // LCD upright with USB lower-right when board is turned clockwise
 
 TFT_eSPI tft;
 String haHost;
@@ -25,11 +26,12 @@ unsigned long lastPoll = 0;
 unsigned long lastReconnect = 0;
 unsigned long bootHeldFrom = 0;
 bool buttonResetTriggered = false;
+uint8_t screenRotation = DEFAULT_SCREEN_ROTATION;
 
-// HA add-on v0.5.3+ supplies a 240x320 JPEG already rotated 90 degrees LEFT.
-// Draw MCU blocks directly; the old MCU rotation caused visible seams.
-static constexpr uint16_t JPEG_WIDTH = 240;
-static constexpr uint16_t JPEG_HEIGHT = 320;
+// HA add-on v0.5.5+ provides landscape 320x240 JPEG, orientation
+// adjusted by the ILI9341's hardware rotation (MADCTL), not MCU remapping.
+static constexpr uint16_t JPEG_WIDTH = 320;
+static constexpr uint16_t JPEG_HEIGHT = 240;
 static bool jpegGeometryError = false;
 
 bool tftBlock(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* colors) {
@@ -61,9 +63,18 @@ void loadSettings() {
   if (!prefs.begin("ubox-cyd", true)) return;
   haHost = prefs.getString("ha_host", "");
   snapshotToken = prefs.getString("token", "");
+  screenRotation = prefs.getUChar("screen_rot", DEFAULT_SCREEN_ROTATION);
+  if (screenRotation != 1 && screenRotation != 3) screenRotation = DEFAULT_SCREEN_ROTATION;
   prefs.end();
   haHost.trim();
   snapshotToken.trim();
+}
+
+void saveRotation(uint8_t rotation) {
+  Preferences prefs;
+  if (!prefs.begin("ubox-cyd", false)) return;
+  prefs.putUChar("screen_rot", rotation);
+  prefs.end();
 }
 
 void persistSettings(const String& host, const String& token) {
@@ -74,17 +85,33 @@ void persistSettings(const String& host, const String& token) {
   prefs.end();
 }
 
+void displaySelfTest() {
+  // Diagnostic, independent of UBox/JPEG. Any noisy/static band in this
+  // test is a TFT driver/SPI/power/hardware issue, not a camera issue.
+  const int16_t w = tft.width(), h = tft.height();
+  tft.fillRect(0, 0, w / 2, h / 2, TFT_RED);
+  tft.fillRect(w / 2, 0, w - w / 2, h / 2, TFT_GREEN);
+  tft.fillRect(0, h / 2, w / 2, h - h / 2, TFT_BLUE);
+  tft.fillRect(w / 2, h / 2, w - w / 2, h - h / 2, TFT_WHITE);
+  tft.drawRect(0, 0, w, h, TFT_YELLOW);
+  tft.setTextColor(TFT_BLACK, TFT_WHITE);
+  tft.drawString("ROT " + String(screenRotation), w / 2 + 12, h / 2 + 12, 2);
+  delay(1600);
+  tft.fillScreen(TFT_BLACK);
+}
+
 void configPortalScreen(const String& apName, const String& apPassword) {
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.drawString("CYD - konfiguracja", 8, 8, 2);
+  tft.drawString("CYD - ustawienia", 8, 8, 2);
   writeScreenLine("1. Polacz sie z Wi-Fi:", 8+34);
   writeScreenLine(apName, 10+60, TFT_CYAN);
   writeScreenLine("Haslo:", 10+94);
   writeScreenLine(apPassword, 10+118, TFT_GREEN);
   writeScreenLine("2. Otworz w przegladarce:", 10+148);
   writeScreenLine("http://192.168.4.1", 10+174, TFT_CYAN);
-  writeScreenLine("3. Ustaw Wi-Fi, IP HA i token", 10+201);
+  writeScreenLine("3. Ustaw Wi-Fi, IP HA", 10+201);
+  writeScreenLine("i token UBox", 10+221);
 }
 
 bool configureNetworking(bool forcePortal) {
@@ -102,15 +129,11 @@ bool configureNetworking(bool forcePortal) {
   wifiManager.setConfigPortalTimeout(0); // Wait until user finishes provisioning.
   wifiManager.setTitle("UBox CYD - ustawienia");
 
-  // Easy setup: SSID "CYD" and exactly 8 random, unambiguous characters.
-  // Password is shown on the physical screen, never compiled into firmware.
+  // User-requested simple WPA2 password. This is NOT a high-security choice:
+  // enable the provisioning AP only briefly and never expose camera credentials
+  // to others connected to this AP during setup.
   const String apName = "CYD";
-  constexpr char ALPHABET[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  String apPassword;
-  apPassword.reserve(9);
-  for (uint8_t i = 0; i < 8; ++i) {
-    apPassword += ALPHABET[esp_random() % (sizeof(ALPHABET) - 1)];
-  }
+  const String apPassword = "12345678";
   wifiManager.setAPCallback([&](WiFiManager*) {
     configPortalScreen(apName, apPassword);
   });
@@ -176,7 +199,7 @@ void pollImage() {
   }
   WiFiClient client;
   HTTPClient http;
-  const String url = "http://" + haHost + ":8100/snapshot-cyd.jpg";
+  const String url = "http://" + haHost + ":8100/snapshot-cyd-wide.jpg";
   if (!http.begin(client, url)) {
     showMessage("Blad polaczenia HA", TFT_RED);
     return;
@@ -240,7 +263,7 @@ void pollImage() {
   tft.endWrite();
   if (result == JDR_OK && !jpegGeometryError) {
     lastEtag = etag;
-    Serial.printf("New portrait JPEG: %u bytes; directly drawn at 240x320\n",
+    Serial.printf("New landscape JPEG: %u bytes; directly drawn at 320x240\n",
                   static_cast<unsigned>(received));
   } else {
     Serial.printf("JPEG error: %d (geometry %d)\n",
@@ -255,28 +278,43 @@ void setup() {
   pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
   pinMode(TFT_BACKLIGHT_PIN, OUTPUT);
   digitalWrite(TFT_BACKLIGHT_PIN, HIGH);
+  // Load the saved orientation BEFORE drawing anything so the setup
+  // menu, Wi-Fi progress and camera image are ALWAYS in one orientation.
+  loadSettings();
   tft.init();
-  tft.setRotation(0); // 240x320 portrait, already rotated by the HA add-on
-  tft.fillScreen(TFT_BLACK);
+  tft.setRotation(screenRotation); // 320x240, default USB at right-lower corner
+  displaySelfTest();
   TJpgDec.setJpgScale(1);
   TJpgDec.setSwapBytes(true);
   TJpgDec.setCallback(tftBlock);
   writeScreenLine("UBox CYD - start...", 8);
-  loadSettings();
   configureNetworking(false);
 }
 
 void loop() {
   // Hold BOOT for 5s AFTER booting (not during reset) to reconfigure.
   // Pressing BOOT during reset instead enters ESP32 flashing mode.
+  // Brief BOOT press: toggle between the two landscape directions (1/3).
+  // Hold for 5 s while running: reset Wi-Fi/HA provisioning.
   if (digitalRead(BOOT_BUTTON_PIN) == LOW) {
     if (!bootHeldFrom) bootHeldFrom = millis();
     if (!buttonResetTriggered && millis() - bootHeldFrom >= 5000) {
       buttonResetTriggered = true;
       resetProvisioning();
     }
-  } else {
+  } else if (bootHeldFrom) {
+    const unsigned long held = millis() - bootHeldFrom;
     bootHeldFrom = 0;
+    if (!buttonResetTriggered && held >= 70 && held < 1800) {
+      screenRotation = (screenRotation == 3) ? 1 : 3;
+      saveRotation(screenRotation);
+      tft.setRotation(screenRotation);
+      tft.fillScreen(TFT_BLACK);
+      writeScreenLine("Obrot: " + String(screenRotation), 8, TFT_CYAN);
+      lastEtag = ""; // force image redraw at the new hardware orientation
+      lastPoll = 0;
+      Serial.printf("Display orientation: %u\n", (unsigned)screenRotation);
+    }
   }
   if (WiFi.status() != WL_CONNECTED) {
     if (millis() - lastReconnect > 10000) {

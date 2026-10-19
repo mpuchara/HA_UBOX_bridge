@@ -18,7 +18,7 @@ captures a HEVC/H.264 frame and stores a full-resolution JPEG from the actual P4
 Add this repository to the HAOS add-on store:
 `https://github.com/mpuchara/HA_UBOX_bridge`
 
-Install/upgrade **UBox Bridge** to v0.5.4. Existing UBox login options and
+Install/upgrade **UBox Bridge** to v0.5.5. Existing UBox login options and
 cached image are preserved. Change `interval_minutes` in the add-on
 configuration to **15** for a fresh snapshot every 15 minutes (or **0** to
 disable automatic capture); **existing installations keep the previous
@@ -72,3 +72,14 @@ resampling to 240×320, 90° left rotation and center crop for full screen.
 The panel shows *actual* P4P stream resolution (not claimed 3 MP sensor
 resolution). If low, compare `stream_index: 0` and optional `1` — not all
 cameras support both. Existing CYD firmware v0.2.3 works unchanged.
+
+## CYD landscape 0.2.4 (USB lower-right)
+
+Requires UBox Bridge 0.5.5+, then capture a fresh shot. Firmware now
+fetches `/snapshot-cyd-wide.jpg` (320×240) and sets the ILI9341 display
+rotation to 3. Mount horizontally with the USB connector at the lower-right.
+If text is inverted, tap BOOT once to toggle hardware rotations 3/1;
+rotation is saved in NVS. Hold BOOT 5 s to reset network settings.
+Setup SSID `CYD` and requested WPA2 password `12345678` (weak;
+keep provisioning short). SPI is 10 MHz for display troubleshooting.
+A 1.6 s color quadrant test on boot distinguishes LCD issues from camera JPEG.
