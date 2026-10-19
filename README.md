@@ -18,7 +18,7 @@ captures a HEVC/H.264 frame and stores a full-resolution JPEG from the actual P4
 Add this repository to the HAOS add-on store:
 `https://github.com/mpuchara/HA_UBOX_bridge`
 
-Install/upgrade **UBox Bridge** to v0.5.5. Existing UBox login options and
+Install/upgrade **UBox Bridge** to v0.5.6. Existing UBox login options and
 cached image are preserved. Change `interval_minutes` in the add-on
 configuration to **15** for a fresh snapshot every 15 minutes (or **0** to
 disable automatic capture); **existing installations keep the previous
@@ -83,3 +83,12 @@ rotation is saved in NVS. Hold BOOT 5 s to reset network settings.
 Setup SSID `CYD` and requested WPA2 password `12345678` (weak;
 keep provisioning short). SPI is 10 MHz for display troubleshooting.
 A 1.6 s color quadrant test on boot distinguishes LCD issues from camera JPEG.
+
+## Display controller and camera orientation (v0.5.6 / CYD v0.2.5)
+
+2-USB versions of ESP32-2432S028 sometimes use **ST7789**, not ILI9341.
+The web installer provides two explicitly labelled options.
+Use ST7789 for a two-USB board with leftover regions/stripes; choose ILI9341
+if its 320×240 test rectangle covers the entire LCD correctly.
+The UBox add-on rotates the **camera pixels** separately (default 90° left,
+configuration `camera_rotation: 90`) and sends a 320×240 full-screen JPEG.

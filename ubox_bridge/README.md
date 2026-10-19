@@ -66,3 +66,11 @@ and is retrieved by CYD firmware 0.2.4+ (TFT landscape rotation 1 or 3).
 Legacy portrait /snapshot-cyd.jpg and native /snapshot.jpg remain unchanged.
 The new route requires the normal token and supports ETag/304.
 Take a new snapshot after installing the addon to create the file.
+
+## Source-angle rotation v0.5.6
+
+LCD rotation alone cannot straighten a camera mounted sideways. The
+320x240 `/snapshot-cyd-wide.jpg` now rotates the **photo** 90° counterclockwise
+with FFmpeg before Lanczos scaling; set `camera_rotation` to 0,90,180,270
+in addon configuration if needed (90 is the default). The native resolution
+still is saved unchanged for HA, and /snapshot-cyd.jpg stays portrait.

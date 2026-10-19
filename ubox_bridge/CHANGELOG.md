@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.6 — separate camera angle correction
+
+- Source video from this camera is sideways even when LCD UI uses landscape orientation.
+- `/snapshot-cyd-wide.jpg` now rotates source 90° **left first**, then scales and crops to 320×240, preserving correct visual scene orientation.
+- Config option `camera_rotation` defaults to 90; change to 0, 180, or 270 if your camera was mounted differently. This affects the new **wide CYD** endpoint only.
+- Portrait CYD and native-resolution Home Assistant endpoints remain unchanged.
+- Source JPEG selection and HD cache remain unchanged; controller-specific TFT correction is shipped separately in CYD firmware 0.2.5.
+
 ## 0.5.5 — landscape CYD monitor (mounting USB at lower-right)
 
 - Keep high-resolution native HA JPEG and legacy 240×320 portrait snapshot.

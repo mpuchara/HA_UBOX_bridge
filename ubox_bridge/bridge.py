@@ -9,6 +9,7 @@ from __future__ import annotations
 import hmac
 from cloud_api import UBoxApiError, discover_devices
 from frame_quality import select_cleanest
+from image_filters import landscape_filter
 import json
 import logging
 import os
@@ -262,6 +263,7 @@ class CameraState:
                     phases = diag.get("stages") if isinstance(diag.get("stages"), dict) else {}
                     self.live_diagnostics = {
                         "backend": "ubox-web",
+                        "camera_rotation": int(self.options.get("camera_rotation", 90)),
                         "stream_index": max(0, min(1, int(self.options.get("stream_index", 0)))),
                         "relay_established": bool(diag.get("relay_established")),
                         "discovered_relay_count": min(100, int(diag.get("discovered_relay_count", 0))),
@@ -336,10 +338,10 @@ class CameraState:
                 # Both low-bandwidth JPGs come from the ORIGINAL source frame.
                 # CYD firmware selects landscape in rotations 1/3.
                 for target, rotate in ((portrait, True), (landscape, False)):
-                    vf = ("scale=320:240:force_original_aspect_ratio=increase:flags=lanczos,"
-                          "crop=320:240")
                     if rotate:
-                        vf += ",transpose=2"
+                        vf = landscape_filter(90)
+                    else:
+                        vf = landscape_filter(self.options.get("camera_rotation", 90))
                     resized = subprocess.run(
                         [FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
                          "-i", str(jpeg), "-vf", vf,
@@ -384,7 +386,7 @@ STATE: CameraState | None = None
 
 
 class ApiHandler(BaseHTTPRequestHandler):
-    server_version = "UBoxBridge/0.5.5"
+    server_version = "UBoxBridge/0.5.6"
 
     def log_message(self, fmt, *args):
         # Never log URLs or query strings containing the snapshot token.

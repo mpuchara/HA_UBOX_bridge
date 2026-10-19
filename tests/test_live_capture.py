@@ -70,7 +70,8 @@ class LiveCaptureTests(unittest.TestCase):
                 wide_commands=[c for c in command_log if str(c[-1]).endswith("frame_cyd_wide.jpg")]
                 self.assertEqual(len(wide_commands),1)
                 self.assertIn("flags=lanczos",str(wide_commands[0]))
-                self.assertNotIn("transpose",str(wide_commands[0]))
+                self.assertIn("transpose=2",str(wide_commands[0]))
+                self.assertLess(str(wide_commands[0]).index("transpose=2"),str(wide_commands[0]).index("scale=320"))
                 self.assertFalse(st.busy)
 
     def test_failed_session_keeps_previous_snapshot(self):
