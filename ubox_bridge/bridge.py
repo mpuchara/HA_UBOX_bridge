@@ -31,6 +31,8 @@ FFMPEG = os.environ.get("UBOX_FFMPEG", "ffmpeg")
 INGRESS_PORT = int(os.environ.get("UBOX_INGRESS_PORT", "8099"))
 SNAPSHOT_PORT = int(os.environ.get("UBOX_SNAPSHOT_PORT", "8100"))
 CAPTURE_TIMEOUT = 150
+NODE_EXECUTABLE = os.environ.get("UBOX_NODE", "/usr/bin/node")
+LIVE_CAPTURE_SCRIPT = Path(os.environ.get("UBOX_LIVE_SCRIPT", "/app/capture_live.js"))
 
 def parse_driver_summary(stderr, stdout, code, size):
     """Summarize P4P progress using allowlisted integers, codes and lengths.
@@ -98,12 +100,13 @@ class CameraState:
         self.last_error = None
         self.last_diagnostics = None
         self.cloud_diagnostics = None
+        self.live_diagnostics = None
         self.last_source = None
         self.last_event_utc = None
         meta_path = DATA / "last_metadata.json"
         try:
             metadata = json.loads(meta_path.read_text(encoding="utf-8"))
-            if metadata.get("source") in ("cloud_recording", "p4p"):
+            if metadata.get("source") in ("cloud_recording", "p4p", "live_alt"):
                 self.last_source = metadata["source"]
                 self.last_event_utc = metadata.get("event_utc")
         except (OSError, ValueError, AttributeError):
@@ -231,6 +234,7 @@ class CameraState:
                 "last_error": self.last_error,
                 "diagnostics": self.last_diagnostics,
                 "cloud_diagnostics": self.cloud_diagnostics,
+                "live_diagnostics": self.live_diagnostics,
                 "last_image_source": self.last_source,
                 "last_cloud_event_utc": self.last_event_utc,
                 "has_image": self.image.is_file() and self.image.stat().st_size > 0,
@@ -242,7 +246,7 @@ class CameraState:
             return False, "Miniatury chmury wymagają konta UBox."
         if not self.configured:
             return False, "Skonfiguruj konto UBox albo UID i hasło P2P."
-        if mode not in ("p4p", "cloud"):
+        if mode not in ("p4p", "cloud", "live_alt"):
             return False, "Nieznany tryb."
         with self.lock:
             if self.busy:
@@ -251,13 +255,15 @@ class CameraState:
             self.last_error = None
             self.last_diagnostics = None
             self.cloud_diagnostics = None
+            self.live_diagnostics = None
             self.last_attempt = utc_now()
-        worker = self.capture_cloud if mode == "cloud" else self.capture
+        workers = {"cloud": self.capture_cloud, "p4p": self.capture, "live_alt": self.capture_live_alt}
+        worker = workers[mode]
         threading.Thread(target=worker, daemon=True).start()
         return True, "Próba pobrania obrazu rozpoczęta."
 
     def publish_metadata(self, source, event_utc=None):
-        if source not in ("p4p", "cloud_recording"):
+        if source not in ("p4p", "cloud_recording", "live_alt"):
             raise ValueError("Invalid image source")
         payload = {"source": source, "event_utc": event_utc}
         tmp = DATA / "last_metadata.new"
@@ -267,6 +273,93 @@ class CameraState:
             self.last_source = source
             self.last_event_utc = event_utc
             self.last_success = utc_now()
+
+    def capture_live_alt(self):
+        """Try UBox's app-like stream-start flow, then extract a still image.
+
+        This uses an independent P4P implementation; it does NOT call a
+        hypothetical UBox cloud 'take photo' endpoint.
+        """
+        try:
+            uid, password = self.resolve_camera()
+            with tempfile.TemporaryDirectory(prefix="live-alt-", dir=DATA) as folder:
+                raw = Path(folder) / "live_stream"
+                jpeg = Path(folder) / "frame.jpg"
+                env = os.environ.copy()
+                env.update({
+                    "UBOX_UID": uid,
+                    "UBOX_PASSWORD": password,
+                    "UBOX_OUTPUT": str(raw),
+                    "UBOX_WAIT_SECONDS": str(max(10, min(75, int(self.options.get("live_timeout_seconds", 45))))),
+                })
+                proc = subprocess.run(
+                    [NODE_EXECUTABLE, str(LIVE_CAPTURE_SCRIPT)],
+                    cwd="/app", env=env, capture_output=True,
+                    timeout=90, check=False,
+                )
+                # Only the JSON object explicitly emitted by our wrapper can
+                # be parsed. The upstream implementation may contain secrets
+                # in arbitrary errors; never log raw stderr/stdout.
+                try:
+                    result = json.loads(proc.stdout.decode("utf-8", "replace").strip())
+                    if not isinstance(result, dict):
+                        raise ValueError("Expected diagnostic object")
+                except (ValueError, UnicodeDecodeError):
+                    raise RuntimeError("Klient ubox-web nie zwrócił diagnostyki JSON.") from None
+                diag = result.get("diagnostics")
+                if isinstance(diag, dict):
+                    # Separate whitelist in Python from anything returned by
+                    # the 3rd party library.
+                    fields = (
+                        "rx", "tx", "decoded", "queryPackets", "relayWakePackets",
+                        "kcpSegments", "kcpMessages", "videoFrames", "h264Frames",
+                        "h264DroppedFrames", "knockPackets", "knockAcks", "rdtFrames",
+                    )
+                    counters = diag.get("counters") if isinstance(diag.get("counters"), dict) else {}
+                    phases = diag.get("stages") if isinstance(diag.get("stages"), dict) else {}
+                    self.live_diagnostics = {
+                        "backend": "ubox-web",
+                        "relay_established": bool(diag.get("relay_established")),
+                        "discovered_relay_count": min(100, int(diag.get("discovered_relay_count", 0))),
+                        "codec": diag.get("codec") if diag.get("codec") in ("h264", "hevc") else None,
+                        "video_frames_collected": min(10000, int(diag.get("video_frames_collected", 0))),
+                        "stream_bytes": min(16000000, int(diag.get("stream_bytes", 0))),
+                        "counters": {k: min(100000000,int(counters.get(k, 0))) for k in fields},
+                        "stages": {k: min(100000, int(phases.get(k, 0))) for k in (
+                            "p4p-query-rsp","relay-wakeup-rsp","relay-stream-rsp",
+                            "session-auto-restart","h264-frame",
+                            "video-watchdog-kick","relay-stream-req-sent",
+                            "relay-reestablish-timeout",
+                        )},
+                    }
+                    LOG.info("Alternate P4P summary: %s", json.dumps(self.live_diagnostics))
+                if proc.returncode or not result.get("ok") or not raw.is_file() or not raw.stat().st_size:
+                    raise RuntimeError("Nowy klient P4P nie odebrał klatek wideo. Zobacz diagnostykę nowego klienta.")
+                codec = self.live_diagnostics.get("codec") if self.live_diagnostics else None
+                if codec not in ("h264","hevc"):
+                    raise RuntimeError("Nowy klient odebrał dane, ale nie rozpoznał kodeka.")
+                ff = subprocess.run(
+                    [FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
+                     "-f", codec, "-i", str(raw),
+                     "-vf", "scale=320:240:force_original_aspect_ratio=decrease,"
+                            "pad=320:240:(ow-iw)/2:(oh-ih)/2",
+                     "-frames:v", "1", "-q:v", "3", str(jpeg)],
+                    capture_output=True, timeout=30, check=False,
+                )
+                if ff.returncode or not jpeg.is_file() or not jpeg.stat().st_size:
+                    raise RuntimeError("Odebrano klatki, lecz FFmpeg nie utworzył zdjęcia.")
+                os.replace(jpeg, self.image)
+            self.publish_metadata("live_alt")
+            LOG.info("Live stream snapshot saved (%d bytes)", self.image.stat().st_size)
+        except subprocess.TimeoutExpired:
+            self.fail("Alternatywny klient P4P przekroczył limit czasu.")
+        except (RuntimeError, UBoxApiError, OSError, ValueError, TypeError) as exc:
+            self.fail(str(exc))
+        except Exception:
+            self.fail("Nieoczekiwany błąd alternatywnego klienta P4P.")
+        finally:
+            with self.lock:
+                self.busy = False
 
     def capture_cloud(self):
         try:
@@ -371,7 +464,7 @@ STATE: CameraState | None = None
 
 
 class ApiHandler(BaseHTTPRequestHandler):
-    server_version = "UBoxBridge/0.3.0"
+    server_version = "UBoxBridge/0.4.0"
 
     def log_message(self, fmt, *args):
         # Never log URLs or query strings containing the snapshot token.
@@ -443,7 +536,7 @@ class ApiHandler(BaseHTTPRequestHandler):
             self.respond(403, b"Forbidden", "text/plain")
             return
         path = urlsplit(self.path).path
-        if path not in ("/capture", "/discover", "/cloud-capture", "/rotate-token"):
+        if path not in ("/capture", "/discover", "/cloud-capture", "/rotate-token", "/live-capture"):
             self.respond(404, b"Not found", "text/plain")
             return
         if path == "/discover":
@@ -452,6 +545,8 @@ class ApiHandler(BaseHTTPRequestHandler):
             accepted, message = STATE.rotate_snapshot_token()
         elif path == "/cloud-capture":
             accepted, message = STATE.trigger("cloud")
+        elif path == "/live-capture":
+            accepted, message = STATE.trigger("live_alt")
         else:
             accepted, message = STATE.trigger("p4p")
         self.json_response(202 if accepted else 409, {"accepted": accepted, "message": message})
@@ -465,7 +560,12 @@ img{display:block;width:100%;max-width:560px;aspect-ratio:4/3;object-fit:contain
 code{overflow-wrap:anywhere;color:#a6eeac}.err{color:#ffaaaa}</style></head>
 <body><h1>📷 UBox Bridge</h1><p>UBox P4P → JPEG 320×240 → Home Assistant / ESP32 CYD</p>
 <div class="card"><p id="status">Wczytywanie…</p><p id="err" class="err"></p>
-<button id="capture">Test P4P: pobierz klatkę</button> <button id="discover">Wykryj kamery UBox</button><p id="devices"></p></div>
+<button id="live">Zrób zdjęcie (nowy klient UBox)</button>
+<button id="capture">Test starego klienta P4P</button>
+<button id="discover">Wykryj kamery UBox</button><p id="devices"></p>
+<p><small>Nowy klient zestawia sesję UBox (wybudzenie, start wideo), odbiera klatki i zapisuje JPEG.
+To tryb eksperymentalny, bez użycia telefonu.</small></p>
+<pre id="liveDiag" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></div>
 <div class="card"><h3>Zdjęcie z chmury UBox (archiwum)</h3>
 <p>Sprawdza miniatury istniejących nagrań w chmurze — NIE wykonuje zdjęcia na żywo.
 Jeżeli kamera nie wysyła nagrań do chmury, wynik może być pusty.</p>
@@ -481,18 +581,21 @@ document.getElementById('err').textContent=s.last_error||s.discovery_error||'';
 document.getElementById('diag').textContent=JSON.stringify(s.diagnostics||{},null,2);
 document.getElementById('discover').disabled=!s.account_configured||s.detecting;
 document.getElementById('cloud').disabled=!s.account_configured||s.capturing;
+document.getElementById('live').disabled=!s.configured||s.capturing;
+document.getElementById('liveDiag').textContent=JSON.stringify(s.live_diagnostics||{},null,2);
 document.getElementById('cloudDiag').textContent=JSON.stringify(s.cloud_diagnostics||{},null,2);
 document.getElementById('devices').textContent=s.devices.map(d=>d.name+' (…'+d.uid_suffix+'): '+(d.has_device_password?'hasło P2P dostępne':'brak hasła P2P')).join(' | ');
 document.getElementById('capture').disabled=!s.configured||s.capturing;
 document.getElementById('stamp').textContent=(s.last_success||'Brak zdjęcia')+
   (s.last_image_source==='cloud_recording'?' — archiwum UBox (czas zdarzenia: '+(s.last_cloud_event_utc ? new Date(s.last_cloud_event_utc*1000).toLocaleString():'nieznany')+')':
-   s.last_image_source==='p4p'?' — transmisja P4P':'');
+   s.last_image_source==='p4p'?' — transmisja P4P':s.last_image_source==='live_alt'?' — nowa transmisja na żywo':'');
 document.getElementById('url').textContent='http://IP_HA:8100/snapshot.jpg?token='+encodeURIComponent(s.snapshot_token);
 if(s.has_image&&last!==s.last_success){last=s.last_success;document.getElementById('image').src='snapshot.jpg?t='+Date.now()}
 }catch(e){document.getElementById('status').textContent='Nie można odczytać statusu.'}}
 document.getElementById('capture').onclick=async()=>{let r=await fetch('capture',{method:'POST'});if(!r.ok)alert('Nie udało się rozpocząć pobierania');refresh()};
 document.getElementById('discover').onclick=async()=>{let r=await fetch('discover',{method:'POST'});if(!r.ok)alert('Nie udało się uruchomić wyszukiwania');refresh()};
 document.getElementById('cloud').onclick=async()=>{let r=await fetch('cloud-capture',{method:'POST'});if(!r.ok)alert('Nie udało się rozpocząć pobierania z chmury');refresh()};
+document.getElementById('live').onclick=async()=>{let r=await fetch('live-capture',{method:'POST'});if(!r.ok)alert('Nie udało się uruchomić nowej transmisji');refresh()};
 document.getElementById('rotate').onclick=async()=>{if(!confirm('Poprzedni adres JPEG przestanie działać. Zmienić token?'))return;let r=await fetch('rotate-token',{method:'POST'});if(!r.ok)alert('Nie udało się zmienić tokenu');refresh()};
 refresh();setInterval(refresh,4000);</script></body></html>'''
 
