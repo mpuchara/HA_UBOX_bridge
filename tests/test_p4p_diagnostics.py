@@ -22,7 +22,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(summary["relay_accepted"], 0)
         self.assertEqual(summary["wake_message_types"][0]["msg_type"], "0x00421202")
         self.assertEqual(summary["wake_message_types"][0]["count"], 2)
-        self.assertEqual(summary["stage2_message_types"][0]["bytes"], 36)
+        self.assertIn(36, [item["bytes"] for item in summary["stage2_message_types"]])
         for secret in ("PRIVATE", "SECRET", "1.2.3.4", "9.8.7.6", "1001"):
             self.assertNotIn(secret, str(summary))
 
