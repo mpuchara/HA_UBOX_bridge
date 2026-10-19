@@ -34,33 +34,40 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p site/firmware
-          cp web-installer/index.html web-installer/manifest.json site/
+          cp web-installer/index.html web-installer/manifest.json web-installer/manifest-ili9341.json site/
           touch site/.nojekyll
-          BUILD=firmware/cyd_monitor/.pio/build/esp32-2432s028
           BOOT_APP0=$(find "$HOME/.platformio/packages/framework-arduinoespressif32" -name boot_app0.bin -print -quit)
           test -n "$BOOT_APP0" && test -s "$BOOT_APP0"
-          test -s "$BUILD/bootloader.bin"
-          test -s "$BUILD/partitions.bin"
-          test -s "$BUILD/firmware.bin"
-          python -m esptool --chip esp32 merge_bin \
-            --output site/firmware/ubox-cyd-esp32.bin \
-            --flash_mode dio --flash_freq 40m --flash_size 4MB \
-            0x1000 "$BUILD/bootloader.bin" \
-            0x8000 "$BUILD/partitions.bin" \
-            0xe000 "$BOOT_APP0" \
-            0x10000 "$BUILD/firmware.bin"
+          for ENV in esp32-2432s028 esp32-2432s028-ili9341; do
+            case "$ENV" in
+              esp32-2432s028) NAME=ubox-cyd-esp32.bin ;;
+              *) NAME=ubox-cyd-ili9341.bin ;;
+            esac
+            BUILD="firmware/cyd_monitor/.pio/build/$ENV"
+            test -s "$BUILD/bootloader.bin"
+            test -s "$BUILD/partitions.bin"
+            test -s "$BUILD/firmware.bin"
+            python -m esptool --chip esp32 merge_bin \
+              --output "site/firmware/$NAME" \
+              --flash_mode dio --flash_freq 40m --flash_size 4MB \
+              0x1000 "$BUILD/bootloader.bin" \
+              0x8000 "$BUILD/partitions.bin" \
+              0xe000 "$BOOT_APP0" \
+              0x10000 "$BUILD/firmware.bin"
+          done
           python - <<'PY'
           import json
           from pathlib import Path
           site = Path("site")
-          manifest = json.loads((site / "manifest.json").read_text())
-          assert manifest["builds"][0]["chipFamily"] == "ESP32"
-          for part in manifest["builds"][0]["parts"]:
-              path = site / part["path"]
-              assert path.exists() and path.stat().st_size > 65536, path
+          for manifest_path in ("manifest.json", "manifest-ili9341.json"):
+              manifest = json.loads((site / manifest_path).read_text())
+              assert manifest["builds"][0]["chipFamily"] == "ESP32"
+              for part in manifest["builds"][0]["parts"]:
+                  path = site / part["path"]
+                  assert path.exists() and path.stat().st_size > 65536, path
           print("Browser installer firmware validated.")
           PY
-          sha256sum site/firmware/ubox-cyd-esp32.bin > site/firmware/SHA256SUMS.txt
+          sha256sum site/firmware/ubox-cyd-esp32.bin site/firmware/ubox-cyd-ili9341.bin > site/firmware/SHA256SUMS.txt
       - name: Upload browser flasher files
         uses: actions/upload-artifact@v4
         with:
@@ -83,6 +90,7 @@ jobs:
         run: |
           set -euo pipefail
           test -s site/firmware/ubox-cyd-esp32.bin
+          test -s site/firmware/ubox-cyd-ili9341.bin
           cp windows-installer/Start-Installer.cmd windows-installer/Install-CYD.ps1 windows-installer/README.md site/
           sha256sum -c site/firmware/SHA256SUMS.txt
           cd site
@@ -100,7 +108,7 @@ jobs:
           TAG="cyd-v${VERSION}-${SHORT_SHA}"
           gh release create "$TAG" UBox-CYD-Windows-Browser-Installer.zip \
             --target "$GITHUB_SHA" --title "CYD Browser Installer $VERSION ($SHORT_SHA)" \
-            --notes "Windows portable browser installer (Edge/Chrome + COM4). Unzip and launch Start-Installer.cmd. The firmware binary was compiled and SHA256 verified in this CI run. GitHub Pages is not required." \
+            --notes "Windows portable browser installer (Edge/Chrome). Contains both ST7789 (try first on a two-USB CYD) and ILI9341 builds. Unzip and launch Start-Installer.cmd. Binaries verified in CI." \
             --latest=false --prerelease
   deploy:
     environment:

@@ -92,3 +92,8 @@ Use ST7789 for a two-USB board with leftover regions/stripes; choose ILI9341
 if its 320×240 test rectangle covers the entire LCD correctly.
 The UBox add-on rotates the **camera pixels** separately (default 90° left,
 configuration `camera_rotation: 90`) and sends a 320×240 full-screen JPEG.
+
+The installer now includes two LCD drivers because two-USB CYD batches
+can differ. Try ST7789 first, then ILI9341 if the color self-test leaves
+stale regions. The firmware checks that every JPEG pixel tile was written,
+so incomplete JPEGs are never recorded as a successful display update.

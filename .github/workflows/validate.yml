@@ -18,6 +18,9 @@ jobs:
         run: |
           test -f firmware/cyd_monitor/platformio.ini
           test ! -f firmware/cyd_monitor/include/config.h
+          grep -q 'ST7789_DRIVER' firmware/cyd_monitor/platformio.ini
+          grep -q 'ILI9341_DRIVER' firmware/cyd_monitor/platformio.ini
+          test -f web-installer/manifest-ili9341.json
       - run: python -m unittest discover -s tests -v
       - run: python scripts/package.py
       - name: Verify archive layout and hashes
@@ -55,7 +58,7 @@ jobs:
           python-version: '3.11'
       - name: Install PlatformIO
         run: python -m pip install platformio
-      - name: Build CYD ESP32-2432S028 firmware
+      - name: Build CYD ESP32-2432S028 firmware (ST7789 and ILI9341)
         run: |
           test ! -f firmware/cyd_monitor/include/config.h
           pio run -d firmware/cyd_monitor
