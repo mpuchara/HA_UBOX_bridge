@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>UBox CYD — instalacja przez USB</title>
+  <style>
+    :root {font-family:system-ui,Segoe UI,Roboto,sans-serif;color:#f3f6fb;background:#0c1425}
+    *{box-sizing:border-box} main{max-width:750px;margin:4rem auto 3rem;padding:0 20px}
+    h1{font-size:clamp(1.8rem,4.5vw,2.8rem);margin:0 0 6px}
+    .subtitle{color:#c4d2e8;margin:4px 0 24px}
+    .panel{background:#17253b;border:1px solid #273953;border-radius:16px;padding:24px;margin:18px 0}
+    .tag{display:inline-block;background:#173a59;color:#8fdbff;padding:6px 12px;border-radius:20px;font-size:.8rem;font-weight:700;margin-bottom:12px}
+    li{line-height:1.75;padding-bottom:10px}code{font-family:Consolas,monospace;color:#9de5cd;word-break:break-word}
+    a{color:#84ccff}.warn{background:#432c19;border-color:#71502c}
+    .muted{color:#adbed4}esp-web-install-button{--esp-tools-button-color:#4cb8ff;--esp-tools-button-text-color:#061b34;--esp-tools-button-border-radius:10px}
+    footer{margin-top:38px;font-size:.86rem;color:#adbed4}
+  </style>
+  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+</head>
+<body>
+<main>
+  <div class="tag">Home Assistant · XEGA 4G · ESP32-2432S028</div>
+  <h1>UBox CYD — instalator</h1>
+  <p class="subtitle">Wgraj firmware jednym kliknięciem przez USB. Nie potrzebujesz VS Code ani PlatformIO.</p>
+  <section class="panel">
+    <h2>1. Wgraj firmware</h2>
+    <ol>
+      <li>Podłącz CYD przez USB do komputera.</li>
+      <li>Otwórz stronę w <b>Chrome lub Edge na Windows</b> i kliknij „Połącz / Zainstaluj”.</li>
+      <li>Wybierz port płytki (u Ciebie <b>COM4</b>) i zaakceptuj instalację.</li>
+      <li>Poczekaj na zakończenie wgrywania. Nie odłączaj urządzenia podczas flashowania.</li>
+    </ol>
+    <esp-web-install-button manifest="./manifest.json">
+      <span slot="unsupported">Instalacja przez USB wymaga Chrome lub Edge na komputerze z obsługą Web Serial, na stronie HTTPS.</span>
+      <span slot="not-allowed">Dostęp do portu szeregowego został zablokowany przez przeglądarkę.</span>
+    </esp-web-install-button>
+    <p class="muted"><small>Przy pierwszej instalacji zawartość flash ESP32 może zostać wyczyszczona. Projekt przeznaczony jest wyłącznie dla klasycznego CYD ESP32-2432S028 z ekranem ILI9341, a nie dla wariantów ESP32-S3/P4.</small></p>
+  </section>
+  <section class="panel">
+    <h2>2. Skonfiguruj przez Wi-Fi</h2>
+    <ol>
+      <li>Po restarcie ekran CYD pokaże własną sieć <code>UBox-CYD-XXXX</code> i jej <b>losowe hasło</b>.</li>
+      <li>Połącz telefon lub komputer z tą siecią Wi-Fi.</li>
+      <li>Jeśli strona ustawień nie otworzy się automatycznie, wpisz <code>http://192.168.4.1</code>.</li>
+      <li>Wybierz swoją domową sieć Wi-Fi <b>2,4 GHz</b> i wpisz jej hasło.</li>
+      <li>W polach dodatkowych wpisz <b>IP Raspberry Pi z HA</b> (np. <code>192.168.1.100</code>, bez <code>:8123</code>) oraz <b>token zdjęć z UBox Bridge</b>.</li>
+      <li>Zapisz. CYD przełączy się na domowe Wi-Fi i pobierze ostatni JPEG z Home Assistanta.</li>
+    </ol>
+    <p class="muted">Ustawienia Wi-Fi, HA i token zapisywane są lokalnie w pamięci ESP32. Nie są przesyłane do tej witryny. Hasło sieci konfiguracyjnej jest losowane na urządzeniu.</p>
+  </section>
+  <section class="panel">
+    <h2>3. Aktualizowanie zdjęcia</h2>
+    <p>Home Assistant wykonuje nowe zdjęcie według <code>interval_minutes</code> (np. 15 minut). CYD sprawdza zapisany obraz co 30 sekund — bez wybudzania kamery LTE. Jeśli obraz się nie zmienił, pobieranie zakończy się HTTP 304.</p>
+    <p>Utrzymuj CYD i Raspberry Pi w jednej sieci lokalnej. Port <code>8100</code> dodatku UBox Bridge musi być osiągalny z CYD.</p>
+  </section>
+  <section class="panel warn">
+    <h2>Zmiana sieci Wi-Fi lub tokenu</h2>
+    <p>Przy działającym CYD przytrzymaj przycisk <b>BOOT przez około 5 sekund</b>, by wyczyścić lokalną konfigurację i ponownie uruchomić kreator Wi-Fi. <b>Nie przytrzymuj BOOT podczas resetowania</b> — to przełącza ESP32 w tryb programowania.</p>
+    <p>Jeżeli zmienisz token w panelu UBox Bridge, musisz wpisać nowy na CYD.</p>
+  </section>
+  <footer>
+    Projekt: <a href="https://github.com/mpuchara/HA_UBOX_bridge">mpuchara/HA_UBOX_bridge</a> ·
+    Zbudowany firmware pochodzi z GitHub Actions tego repozytorium.
+  </footer>
+</main>
+</body>
+</html>
