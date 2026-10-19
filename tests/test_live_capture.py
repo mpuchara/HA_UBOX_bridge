@@ -33,7 +33,11 @@ class LiveCaptureTests(unittest.TestCase):
                 if str(cmd[0]).endswith("node"):
                     Path(kwargs["env"]["UBOX_OUTPUT"]).write_bytes(b"\x00\x00\x01\x65")
                     return Process(stdout=json.dumps({"ok":True, "diagnostics":diag}).encode())
-                Path(cmd[-1]).write_bytes(b"\xff\xd8render\xff\xd9")
+                if "%03d.ppm" in str(cmd[-1]):
+                    sample=Path(str(cmd[-1]).replace("%03d","001"))
+                    sample.write_bytes(b"P6\n320 240\n255\n"+bytes([75,90,105])*(320*240))
+                else:
+                    Path(cmd[-1]).write_bytes(b"\xff\xd8render\xff\xd9")
                 return Process()
             with patch.object(bridge,"DATA",base),patch.object(bridge,"OPTIONS",base/"options.json"), \
                  patch.object(bridge.subprocess,"run",side_effect=run):
