@@ -8,7 +8,7 @@ on:
       - '.github/workflows/cyd-web-installer.yml'
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 concurrency:
@@ -67,10 +67,41 @@ jobs:
           name: UBox-CYD-browser-installer
           path: site/
           include-hidden-files: true
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+  release-windows:
+    runs-on: ubuntu-latest
+    needs: firmware
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
         with:
+          name: UBox-CYD-browser-installer
           path: site
+      - name: Pack Windows browser installer from verified binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s site/firmware/ubox-cyd-esp32.bin
+          cp windows-installer/Start-Installer.cmd windows-installer/Install-CYD.ps1 windows-installer/README.md site/
+          cd site
+          sha256sum -c firmware/SHA256SUMS.txt
+          zip -r ../UBox-CYD-Windows-Browser-Installer.zip .
+          cd ..
+          unzip -t UBox-CYD-Windows-Browser-Installer.zip
+      - name: Publish installer ZIP in GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(python -c 'import json; print(json.load(open("web-installer/manifest.json"))["version"])')
+          SHORT_SHA=$(git rev-parse --short=8 HEAD)
+          TAG="cyd-v${VERSION}-${SHORT_SHA}"
+          gh release create "$TAG" UBox-CYD-Windows-Browser-Installer.zip \
+            --target "$GITHUB_SHA" --title "CYD Browser Installer $VERSION ($SHORT_SHA)" \
+            --notes "Windows portable browser installer (Edge/Chrome + COM4). Unzip and launch Start-Installer.cmd. The firmware binary was compiled and SHA256 verified in this CI run. GitHub Pages is not required." \
+            --latest=false --prerelease
   deploy:
     environment:
       name: github-pages
@@ -78,6 +109,22 @@ jobs:
     runs-on: ubuntu-latest
     needs: firmware
     steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: UBox-CYD-browser-installer
+          path: site
+      - name: Check whether GitHub Pages is enabled
+        id: pages_setup
+        uses: actions/configure-pages@v5
+        continue-on-error: true
+      - name: Pages needs initial activation
+        if: steps.pages_setup.outcome != 'success'
+        run: echo "::warning::Enable Pages in Settings > Pages > Source GitHub Actions, then rerun this workflow. Windows ZIP is published separately."
+      - if: steps.pages_setup.outcome == 'success'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
       - name: Deploy GitHub Pages
+        if: steps.pages_setup.outcome == 'success'
         id: deployment
         uses: actions/deploy-pages@v4
