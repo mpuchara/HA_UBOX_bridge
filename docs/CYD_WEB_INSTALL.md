@@ -79,3 +79,13 @@ Zaktualizuj najpierw UBox Bridge do 0.5.6, wykonaj nowe zdjęcie.
 Od tej wersji obrót o 90° w lewo dotyczy także właściwego zdjęcia,
 nie tylko menu LCD. W konfiguracji dodatku jest `camera_rotation: 90`.
 Sieć AP: `CYD`, hasło `12345678` (słabe; uruchamiaj tylko na czas konfiguracji).
+
+## Sterowanie PTZ gestami (CYD 0.2.6 / Bridge 0.5.9)
+
+Zaktualizuj najpierw **UBox Bridge 0.5.9**. Wgraj CYD 0.2.6
+(ST7789 albo ILI9341 — wybierz dotychczas działający kontroler).
+Podczas pierwszego uruchomienia dotknij 3 krzyżyków na wyświetlaczu,
+aby zapisać kalibrację XPT2046. Później przesunięcie palcem po obrazie
+(>38 px) oznacza jeden krótki ruch kamery + STOP i nowy obraz.
+BOOT 2–4 sekundy — ponowna kalibracja dotyku. Krótko — obrót LCD,
+5 sekund — reset konfiguracji. Port 8100 pozostaje tylko w sieci LAN.

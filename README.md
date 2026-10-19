@@ -130,3 +130,16 @@ using a second session. Ingress provides arrow buttons for diagnostics. This
 is not continuous video and is not hardware-confirmed on this XEGA firmware.
 Only the already-authorized camera can be moved; avoid public exposure of
 port 8100. Old CYD firmware remains able to display stills.
+
+## Swipe/PTZ v0.5.9 (CYD v0.2.6)
+
+Swipe left/right/up/down on CYD to issue one authenticated POST /ptz to
+UBox Bridge, with fixed direction. P4P uses short 420ms movement + STOP,
+followed by a separate video session to capture a **post-motion** JPEG.
+The LCD checks for a new ETag every 2.5 seconds after a swipe (max 110s).
+The 3-point XPT2046 calibration runs on first boot and is saved in NVS;
+hold BOOT 2–4s to recalibrate later. Use the same LCD driver variant that
+already displayed the camera correctly. **Upgrade bridge first** to 0.5.9.
+PTZ may not work on all XEGA firmware; requires live device verification.
+Snapshot token now authorizes PTZ movement too — protect it and keep
+port 8100 on LAN only.
