@@ -93,9 +93,11 @@ bool configureNetworking(bool forcePortal) {
 
   // Random WPA2 AP password is shown only on the physical display.
   const uint32_t nonce = esp_random();
-  const String apName = "UBox-CYD-" + String(nonce & 0xffff, HEX);
-  const String apPassword = "ucyd" + String(nonce, HEX) + "!";
-  // 4 + (up to 8) + 1 chars, always >= 8 bytes.
+  char nonceHex[9];
+  snprintf(nonceHex, sizeof(nonceHex), "%08lx", static_cast<unsigned long>(nonce));
+  const String apName = "UBox-CYD-" + String(nonceHex).substring(4);
+  const String apPassword = "ucyd" + String(nonceHex) + "!";
+  // Always 13 chars; WPA2 requires at least 8.
   wifiManager.setAPCallback([&](WiFiManager*) {
     configPortalScreen(apName, apPassword);
   });
