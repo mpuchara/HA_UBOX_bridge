@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- Safe P4P diagnostics and relay-stage counters in panel and logs.
+- Correct Python FFmpeg filter string warning.
+
+
 ## 0.2.0 — experimental
 
 - UBox account login via HTTPS and automatic device list discovery.

@@ -9,6 +9,7 @@ from __future__ import annotations
 import hmac
 from cloud_api import UBoxApiError, discover_devices
 import json
+import re
 import logging
 import os
 import secrets
@@ -31,6 +32,20 @@ INGRESS_PORT = int(os.environ.get("UBOX_INGRESS_PORT", "8099"))
 SNAPSHOT_PORT = int(os.environ.get("UBOX_SNAPSHOT_PORT", "8100"))
 CAPTURE_TIMEOUT = 150
 
+def parse_driver_summary(stderr, stdout, code, size):
+    """Allowlisted counters only. Never expose raw upstream output or addresses."""
+    raw=(stderr+b"\n"+stdout)[-1048576:].decode("utf-8","replace")
+    return {
+        "return_code": code, "hevc_bytes": size,
+        "wake_packets": int((re.findall(r"wake burst:\s*(\d+) knocks",raw) or ["0"])[-1]),
+        "wake_replies": len(re.findall("wake-phase pkt",raw)),
+        "stage2_packets": len(re.findall("stage2 pkt",raw)),
+        "relay_accepted": len(re.findall("got rlystreamrsp",raw)),
+        "no_video_retries": len(re.findall(r"attempt \d+/\d+: no video",raw)),
+        "python_errors": len(re.findall("Traceback|ModuleNotFoundError|ImportError",raw)),
+    }
+
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -47,6 +62,7 @@ class CameraState:
         self.discovery_at = 0
         self.discovery_error = None
         self.last_error = None
+        self.last_diagnostics = None
         self.last_attempt = None
         self.last_success = None
         if self.image.is_file() and self.image.stat().st_size:
@@ -155,6 +171,7 @@ class CameraState:
                 "last_attempt": self.last_attempt,
                 "last_success": self.last_success,
                 "last_error": self.last_error,
+                "diagnostics": self.last_diagnostics,
                 "has_image": self.image.is_file() and self.image.stat().st_size > 0,
                 "interval_minutes": int(self.options.get("interval_minutes", 0)),
             }
@@ -167,6 +184,7 @@ class CameraState:
                 return False, "Pobieranie już trwa."
             self.busy = True
             self.last_error = None
+            self.last_diagnostics = None
             self.last_attempt = utc_now()
         threading.Thread(target=self.capture, daemon=True).start()
         return True, "Próba pobrania obrazu rozpoczęta."
@@ -187,13 +205,21 @@ class CameraState:
                     cwd=DRIVER, env=env, capture_output=True, timeout=CAPTURE_TIMEOUT,
                     check=False,
                 )
-                # Driver stdout can contain UID/session metadata, so never log it.
-                if proc.returncode or not raw.exists() or not raw.stat().st_size:
-                    raise RuntimeError("P4P nie zwrócił wideo (kamera śpi, błędne dane lub nieobsługiwany protokół).")
+                # Do not log raw driver output: it contains private IPs and session metadata.
+                size = raw.stat().st_size if raw.is_file() else 0
+                summary = parse_driver_summary(proc.stderr, proc.stdout, proc.returncode, size)
+                with self.lock:
+                    self.last_diagnostics = summary
+                LOG.info("Sanitized P4P summary: %s", json.dumps(summary))
+                if proc.returncode or not size:
+                    cause = ("Błąd sterownika" if summary["python_errors"] else
+                             "Relay nie potwierdził transmisji" if not summary["relay_accepted"]
+                             else "Relay odpowiedział, ale nie dostarczył klatek")
+                    raise RuntimeError("P4P: " + cause)
                 ff = subprocess.run(
                     [FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
                      "-f", "hevc", "-i", str(raw),
-                     "-vf", "select=eq(pict_type\,I),scale=320:240:force_original_aspect_ratio=decrease,"
+                     "-vf", r"select=eq(pict_type\,I),scale=320:240:force_original_aspect_ratio=decrease,"
                             "pad=320:240:(ow-iw)/2:(oh-ih)/2",
                      "-frames:v", "1", "-q:v", "3", str(jpeg)],
                     capture_output=True, timeout=30, check=False,
@@ -225,7 +251,7 @@ STATE: CameraState | None = None
 
 
 class ApiHandler(BaseHTTPRequestHandler):
-    server_version = "UBoxBridge/0.2"
+    server_version = "UBoxBridge/0.2.1"
 
     def log_message(self, fmt, *args):
         # Never log URLs or query strings containing the snapshot token.
@@ -313,12 +339,13 @@ code{overflow-wrap:anywhere;color:#a6eeac}.err{color:#ffaaaa}</style></head>
 <body><h1>📷 UBox Bridge</h1><p>UBox P4P → JPEG 320×240 → Home Assistant / ESP32 CYD</p>
 <div class="card"><p id="status">Wczytywanie…</p><p id="err" class="err"></p>
 <button id="capture">Pobierz nową klatkę</button> <button id="discover">Wykryj kamery UBox</button><p id="devices"></p></div>
-<div class="card"><img id="image" alt="Ostatnia klatka"><p id="stamp">Brak zdjęcia</p></div>
+<div class="card"><b>Diagnostyka P4P</b><pre id="diag"></pre></div><div class="card"><img id="image" alt="Ostatnia klatka"><p id="stamp">Brak zdjęcia</p></div>
 <div class="card"><b>Adres dla CYD (sieć lokalna):</b><p><code id="url"></code></p>
 <small>Zamień IP_HA na lokalny adres Raspberry Pi. Nie udostępniaj URL z tokenem publicznie.</small></div>
 <script>let last='';async function refresh(){try{let r=await fetch('status',{cache:'no-store'}),s=await r.json();
 document.getElementById('status').textContent=!s.configured?'Skonfiguruj konto UBox lub ręczne dane P2P.':s.capturing?'Pobieranie obrazu…':s.detecting?'Wykrywanie kamer na koncie UBox…':s.has_image?'Ostatnia klatka dostępna.':'Kliknij Pobierz nową klatkę.';
 document.getElementById('err').textContent=s.last_error||s.discovery_error||'';
+document.getElementById('diag').textContent=JSON.stringify(s.diagnostics||{},null,2);
 document.getElementById('discover').disabled=!s.account_configured||s.detecting;
 document.getElementById('devices').textContent=s.devices.map(d=>d.name+' (…'+d.uid_suffix+'): '+(d.has_device_password?'hasło P2P dostępne':'brak hasła P2P')).join(' | ');
 document.getElementById('capture').disabled=!s.configured||s.capturing;

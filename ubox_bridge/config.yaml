@@ -1,5 +1,5 @@
 name: UBox Bridge
-version: "0.2.0"
+version: "0.2.1"
 slug: ubox_bridge
 description: Experimental UBox P4P snapshot bridge for Home Assistant and ESP32 CYD
 url: https://github.com/mpuchara/HA_UBOX_bridge
