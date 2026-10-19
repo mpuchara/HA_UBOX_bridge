@@ -7,7 +7,7 @@ CYD snapshot interface: TCP 8100, token-protected, LAN port (never forward publi
 from __future__ import annotations
 
 import hmac
-from cloud_api import UBoxApiError, discover_devices
+from cloud_api import UBoxApiError, discover_devices, get_cloud_snapshot
 import json
 import re
 import logging
@@ -97,6 +97,17 @@ class CameraState:
         self.discovery_error = None
         self.last_error = None
         self.last_diagnostics = None
+        self.cloud_diagnostics = None
+        self.last_source = None
+        self.last_event_utc = None
+        meta_path = DATA / "last_metadata.json"
+        try:
+            metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+            if metadata.get("source") in ("cloud_recording", "p4p"):
+                self.last_source = metadata["source"]
+                self.last_event_utc = metadata.get("event_utc")
+        except (OSError, ValueError, AttributeError):
+            pass
         self.last_attempt = None
         self.last_success = None
         if self.image.is_file() and self.image.stat().st_size:
@@ -206,22 +217,85 @@ class CameraState:
                 "last_success": self.last_success,
                 "last_error": self.last_error,
                 "diagnostics": self.last_diagnostics,
+                "cloud_diagnostics": self.cloud_diagnostics,
+                "last_image_source": self.last_source,
+                "last_cloud_event_utc": self.last_event_utc,
                 "has_image": self.image.is_file() and self.image.stat().st_size > 0,
                 "interval_minutes": int(self.options.get("interval_minutes", 0)),
             }
 
-    def trigger(self) -> tuple[bool, str]:
+    def trigger(self, mode="p4p") -> tuple[bool, str]:
+        if mode == "cloud" and not self.account_configured:
+            return False, "Miniatury chmury wymagają konta UBox."
         if not self.configured:
             return False, "Skonfiguruj konto UBox albo UID i hasło P2P."
+        if mode not in ("p4p", "cloud"):
+            return False, "Nieznany tryb."
         with self.lock:
             if self.busy:
                 return False, "Pobieranie już trwa."
             self.busy = True
             self.last_error = None
             self.last_diagnostics = None
+            self.cloud_diagnostics = None
             self.last_attempt = utc_now()
-        threading.Thread(target=self.capture, daemon=True).start()
+        worker = self.capture_cloud if mode == "cloud" else self.capture
+        threading.Thread(target=worker, daemon=True).start()
         return True, "Próba pobrania obrazu rozpoczęta."
+
+    def publish_metadata(self, source, event_utc=None):
+        if source not in ("p4p", "cloud_recording"):
+            raise ValueError("Invalid image source")
+        payload = {"source": source, "event_utc": event_utc}
+        tmp = DATA / "last_metadata.new"
+        tmp.write_text(json.dumps(payload), encoding="utf-8")
+        os.replace(tmp, DATA / "last_metadata.json")
+        with self.lock:
+            self.last_source = source
+            self.last_event_utc = event_utc
+            self.last_success = utc_now()
+
+    def capture_cloud(self):
+        try:
+            uid, _ = self.resolve_camera()
+            days = max(1, min(30, int(self.options.get("cloud_lookback_days", 7))))
+            jpeg_data, summary = get_cloud_snapshot(
+                self.options["account_email"],
+                self.options["account_password"],
+                uid,
+                lookback_days=days,
+            )
+            with self.lock:
+                self.cloud_diagnostics = summary
+            LOG.info("Cloud snapshot scan: events=%d thumbnails=%d", summary["event_count"], summary["events_with_thumbnail"])
+            if not jpeg_data:
+                raise RuntimeError("W chmurze UBox nie znaleziono miniatur nagrań z tego okresu. To nie jest podgląd na żywo.")
+            with tempfile.TemporaryDirectory(prefix="cloud-", dir=DATA) as folder:
+                source = Path(folder) / "original.jpg"
+                target = Path(folder) / "converted.jpg"
+                source.write_bytes(jpeg_data)
+                proc = subprocess.run(
+                    [FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
+                     "-i", str(source),
+                     "-vf", "scale=320:240:force_original_aspect_ratio=decrease,"
+                            "pad=320:240:(ow-iw)/2:(oh-ih)/2",
+                     "-frames:v", "1", "-q:v", "3", str(target)],
+                    capture_output=True, timeout=30, check=False
+                )
+                if proc.returncode or not target.is_file() or target.stat().st_size == 0:
+                    raise RuntimeError("Nie udało się przeskalować miniatury nagrania.")
+                os.replace(target, self.image)
+            self.publish_metadata("cloud_recording", summary.get("event_utc"))
+            LOG.info("Cloud recording thumbnail ready (%d bytes)", self.image.stat().st_size)
+        except subprocess.TimeoutExpired:
+            self.fail("Timeout podczas przetwarzania miniatury chmury.")
+        except (UBoxApiError, RuntimeError, OSError, ValueError) as exc:
+            self.fail(str(exc))
+        except Exception:
+            self.fail("Nieoczekiwany błąd pobierania miniatury chmury.")
+        finally:
+            with self.lock:
+                self.busy = False
 
     def capture(self):
         attempts = min(8, max(1, int(self.options.get("attempts", 3))))
@@ -261,8 +335,7 @@ class CameraState:
                 if ff.returncode or not jpeg.exists() or not jpeg.stat().st_size:
                     raise RuntimeError("Odebrano HEVC, ale FFmpeg nie utworzył JPEG.")
                 os.replace(jpeg, self.image)
-                with self.lock:
-                    self.last_success = utc_now()
+                self.publish_metadata("p4p")
                 LOG.info("Snapshot ready (%s bytes)", self.image.stat().st_size)
         except subprocess.TimeoutExpired:
             self.fail("Upłynął limit czasu odpowiedzi kamerki.")
@@ -285,7 +358,7 @@ STATE: CameraState | None = None
 
 
 class ApiHandler(BaseHTTPRequestHandler):
-    server_version = "UBoxBridge/0.2.2"
+    server_version = "UBoxBridge/0.3.0"
 
     def log_message(self, fmt, *args):
         # Never log URLs or query strings containing the snapshot token.
@@ -357,10 +430,15 @@ class ApiHandler(BaseHTTPRequestHandler):
             self.respond(403, b"Forbidden", "text/plain")
             return
         path = urlsplit(self.path).path
-        if path not in ("/capture", "/discover"):
+        if path not in ("/capture", "/discover", "/cloud-capture"):
             self.respond(404, b"Not found", "text/plain")
             return
-        accepted, message = STATE.discover() if path == "/discover" else STATE.trigger()
+        if path == "/discover":
+            accepted, message = STATE.discover()
+        elif path == "/cloud-capture":
+            accepted, message = STATE.trigger("cloud")
+        else:
+            accepted, message = STATE.trigger("p4p")
         self.json_response(202 if accepted else 409, {"accepted": accepted, "message": message})
 
 
@@ -372,7 +450,12 @@ img{display:block;width:100%;max-width:560px;aspect-ratio:4/3;object-fit:contain
 code{overflow-wrap:anywhere;color:#a6eeac}.err{color:#ffaaaa}</style></head>
 <body><h1>📷 UBox Bridge</h1><p>UBox P4P → JPEG 320×240 → Home Assistant / ESP32 CYD</p>
 <div class="card"><p id="status">Wczytywanie…</p><p id="err" class="err"></p>
-<button id="capture">Pobierz nową klatkę</button> <button id="discover">Wykryj kamery UBox</button><p id="devices"></p></div>
+<button id="capture">Test P4P: pobierz klatkę</button> <button id="discover">Wykryj kamery UBox</button><p id="devices"></p></div>
+<div class="card"><h3>Zdjęcie z chmury UBox (archiwum)</h3>
+<p>Sprawdza miniatury istniejących nagrań w chmurze — NIE wykonuje zdjęcia na żywo.
+Jeżeli kamera nie wysyła nagrań do chmury, wynik może być pusty.</p>
+<button id="cloud">Pobierz ostatnią miniaturę nagrania</button>
+<pre id="cloudDiag" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></div>
 <div class="card"><b>Diagnostyka P4P</b><p><small>Odpowiedzi na wybudzanie mogą pochodzić od serwerów UBox — same liczby pakietów nie potwierdzają połączenia z kamerą. Sekcje wake_message_types i stage2_message_types pokazują wyłącznie typy, rozmiary i liczbę pakietów (bez danych prywatnych).</small></p><pre id="diag" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></div><div class="card"><img id="image" alt="Ostatnia klatka"><p id="stamp">Brak zdjęcia</p></div>
 <div class="card"><b>Adres dla CYD (sieć lokalna):</b><p><code id="url"></code></p>
 <small>Zamień IP_HA na lokalny adres Raspberry Pi. Nie udostępniaj URL z tokenem publicznie.</small></div>
@@ -381,14 +464,19 @@ document.getElementById('status').textContent=!s.configured?'Skonfiguruj konto U
 document.getElementById('err').textContent=s.last_error||s.discovery_error||'';
 document.getElementById('diag').textContent=JSON.stringify(s.diagnostics||{},null,2);
 document.getElementById('discover').disabled=!s.account_configured||s.detecting;
+document.getElementById('cloud').disabled=!s.account_configured||s.capturing;
+document.getElementById('cloudDiag').textContent=JSON.stringify(s.cloud_diagnostics||{},null,2);
 document.getElementById('devices').textContent=s.devices.map(d=>d.name+' (…'+d.uid_suffix+'): '+(d.has_device_password?'hasło P2P dostępne':'brak hasła P2P')).join(' | ');
 document.getElementById('capture').disabled=!s.configured||s.capturing;
-document.getElementById('stamp').textContent=s.last_success||'Brak zdjęcia';
+document.getElementById('stamp').textContent=(s.last_success||'Brak zdjęcia')+
+  (s.last_image_source==='cloud_recording'?' — archiwum UBox (czas zdarzenia: '+(s.last_cloud_event_utc ? new Date(s.last_cloud_event_utc*1000).toLocaleString():'nieznany')+')':
+   s.last_image_source==='p4p'?' — transmisja P4P':'');
 document.getElementById('url').textContent='http://IP_HA:8100/snapshot.jpg?token='+encodeURIComponent(s.snapshot_token);
 if(s.has_image&&last!==s.last_success){last=s.last_success;document.getElementById('image').src='snapshot.jpg?t='+Date.now()}
 }catch(e){document.getElementById('status').textContent='Nie można odczytać statusu.'}}
 document.getElementById('capture').onclick=async()=>{let r=await fetch('capture',{method:'POST'});if(!r.ok)alert('Nie udało się rozpocząć pobierania');refresh()};
 document.getElementById('discover').onclick=async()=>{let r=await fetch('discover',{method:'POST'});if(!r.ok)alert('Nie udało się uruchomić wyszukiwania');refresh()};
+document.getElementById('cloud').onclick=async()=>{let r=await fetch('cloud-capture',{method:'POST'});if(!r.ok)alert('Nie udało się rozpocząć pobierania z chmury');refresh()};
 refresh();setInterval(refresh,4000);</script></body></html>'''
 
 
