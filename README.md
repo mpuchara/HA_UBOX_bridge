@@ -18,7 +18,7 @@ captures a HEVC/H.264 frame and stores a full-resolution JPEG from the actual P4
 Add this repository to the HAOS add-on store:
 `https://github.com/mpuchara/HA_UBOX_bridge`
 
-Install/upgrade **UBox Bridge** to v0.5.8. Existing UBox login options and
+Install/upgrade **UBox Bridge** to v0.5.10. Existing UBox login options and
 cached image are preserved. Change `interval_minutes` in the add-on
 configuration to **15** for a fresh snapshot every 15 minutes (or **0** to
 disable automatic capture); **existing installations keep the previous
@@ -121,7 +121,7 @@ panel after a successful photo; HD is **requested, not guaranteed**.
 Failure retains the old cached still and does not automatically retry SD.
 No firmware change to CYD or new JPEG URL is needed.
 
-## PTZ gestures (bridge v0.5.9 + CYD v0.2.6)
+## PTZ gestures (bridge v0.5.10 + CYD v0.2.6)
 
 Experimental swipe-to-move support: a CYD gesture sends a token-authenticated
 LAN POST /ptz to bridge with fixed direction only. The bridge opens a P4P
@@ -131,7 +131,7 @@ is not continuous video and is not hardware-confirmed on this XEGA firmware.
 Only the already-authorized camera can be moved; avoid public exposure of
 port 8100. Old CYD firmware remains able to display stills.
 
-## Swipe/PTZ v0.5.9 (CYD v0.2.6)
+## Swipe/PTZ v0.5.10 (CYD v0.2.6)
 
 Swipe left/right/up/down on CYD to issue one authenticated POST /ptz to
 UBox Bridge, with fixed direction. P4P uses short 420ms movement + STOP,
@@ -139,7 +139,7 @@ followed by a separate video session to capture a **post-motion** JPEG.
 The LCD checks for a new ETag every 2.5 seconds after a swipe (max 110s).
 The 3-point XPT2046 calibration runs on first boot and is saved in NVS;
 hold BOOT 2–4s to recalibrate later. Use the same LCD driver variant that
-already displayed the camera correctly. **Upgrade bridge first** to 0.5.9.
+already displayed the camera correctly. **Upgrade bridge first** to 0.5.10.
 PTZ may not work on all XEGA firmware; requires live device verification.
 Snapshot token now authorizes PTZ movement too — protect it and keep
 port 8100 on LAN only.

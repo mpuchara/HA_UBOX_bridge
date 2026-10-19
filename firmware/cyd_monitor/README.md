@@ -1,6 +1,6 @@
 # UBox CYD Monitor v0.2.6 — dotykowe sterowanie PTZ
 
-**Wymaga UBox Bridge 0.5.9+** (wersja 0.5.8 i starsze nie obsługują POST /ptz).
+**Wymaga UBox Bridge 0.5.10+** (wersja 0.5.8 i starsze nie obsługują POST /ptz).
 Wgraj aktualny firmware poprzez instalator w przeglądarce lub Windows ZIP.
 
 - Przy pierwszym uruchomieniu pojawią się 3 krzyżyki. Dotknij każdego,

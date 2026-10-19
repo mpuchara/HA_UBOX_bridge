@@ -501,7 +501,7 @@ STATE: CameraState | None = None
 
 
 class ApiHandler(BaseHTTPRequestHandler):
-    server_version = "UBoxBridge/0.5.9"
+    server_version = "UBoxBridge/0.5.10"
 
     def log_message(self, fmt, *args):
         # Never log URLs or query strings containing the snapshot token.

@@ -80,9 +80,9 @@ Od tej wersji obrót o 90° w lewo dotyczy także właściwego zdjęcia,
 nie tylko menu LCD. W konfiguracji dodatku jest `camera_rotation: 90`.
 Sieć AP: `CYD`, hasło `12345678` (słabe; uruchamiaj tylko na czas konfiguracji).
 
-## Sterowanie PTZ gestami (CYD 0.2.6 / Bridge 0.5.9)
+## Sterowanie PTZ gestami (CYD 0.2.6 / Bridge 0.5.10)
 
-Zaktualizuj najpierw **UBox Bridge 0.5.9**. Wgraj CYD 0.2.6
+Zaktualizuj najpierw **UBox Bridge 0.5.10**. Wgraj CYD 0.2.6
 (ST7789 albo ILI9341 — wybierz dotychczas działający kontroler).
 Podczas pierwszego uruchomienia dotknij 3 krzyżyków na wyświetlaczu,
 aby zapisać kalibrację XPT2046. Później przesunięcie palcem po obrazie

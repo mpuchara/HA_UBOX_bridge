@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.10 — full PTZ/CYD gesture release
+
+- Final release of swipe-to-move control with token-protected PTZ API, short movement + STOP, then fresh JPEG capture.
+- Use proven SD stream for short PTZ control sessions, while snapshot capture continues to request the configured HD stream.
+- Paired CYD 0.2.6 offers XPT2046 gesture calibration and immediate post-motion refresh.
+
 ## 0.5.9 — touch swipe PTZ endpoint
 
 - Add authenticated LAN POST /ptz (header X-UBox-Token required), plus Ingress arrow buttons.

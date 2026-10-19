@@ -109,7 +109,7 @@ is not proof of a HD stream. If HD capture fails, the last good SD snapshot
 will remain cached; you can change the profile to SD and restart, without
 forcing retries that would drain the LTE camera.
 
-## Swipe to move (0.5.9, experimental)
+## Swipe to move (0.5.10, experimental)
 
 POST `http://IP_HA:8100/ptz` with header `X-UBox-Token: TOKEN`,
 JSON `{"direction":"left"}` (or right/up/down), on a trusted LAN only.
