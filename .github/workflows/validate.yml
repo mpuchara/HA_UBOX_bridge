@@ -38,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build x86_64 add-on image (ARM64 still requires Pi 4 validation)
-        run: docker build --build-arg BUILD_ARCH=amd64 --build-arg BUILD_VERSION=0.5.0 -t ubox-bridge:smoke ubox_bridge
+        run: docker build --build-arg BUILD_ARCH=amd64 --build-arg BUILD_VERSION=0.5.1 -t ubox-bridge:smoke ubox_bridge
       - name: Check server startup and health
         run: |
           docker run -d --name ubox --publish 127.0.0.1:18100:8100 ubox-bridge:smoke
@@ -46,3 +46,17 @@ jobs:
           curl --fail http://127.0.0.1:18100/health
           docker logs ubox
           docker stop ubox
+
+  cyd-firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PlatformIO
+        run: python -m pip install platformio
+      - name: Build CYD ESP32-2432S028 firmware
+        run: |
+          cp firmware/cyd_monitor/include/config.h.example firmware/cyd_monitor/include/config.h
+          pio run -d firmware/cyd_monitor

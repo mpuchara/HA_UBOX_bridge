@@ -1,6 +1,12 @@
 # Changelog
 
-## 0.5.0 — periodic live snapshots and CYD monitoring
+## 0.5.1 — CYD firmware build validation
+
+- Fix ESP32 HTTP image stream read timeout and confirm firmware compilation in CI.
+- Keep same verified UBox live snapshot backend and HA scheduler.
+
+
+## 0.5.1 — periodic live snapshots and CYD monitoring
 
 - Retain only the working asyrk/ubox-web live-capture method in the addon.
 - Fix scheduled and startup capture to use the verified live transport.
