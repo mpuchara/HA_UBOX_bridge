@@ -26,6 +26,8 @@ class PtZApiTests(unittest.TestCase):
                     server.daemon_threads=True
                     worker=threading.Thread(target=server.serve_forever,daemon=True)
                     worker.start()
+                    # Local test socket uses a random port, not the HA OS mapped port.
+                    bridge.SNAPSHOT_PORT = server.server_port
                     try:
                         def call(path,token=None,body=b'{"direction":"left"}'):
                             con=http.client.HTTPConnection("127.0.0.1",server.server_port,timeout=2)
