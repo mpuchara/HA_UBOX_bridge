@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 — cloud-recording thumbnail fallback
+
+- Manual UBox cloud recording list query and latest event JPEG extraction.
+- Separate archive mode with event time and counts; does not claim live video.
+- Preserves cached last frame across failed attempts.
+- HTTPS thumbnail URL allowlist, redirect prevention and 6 MiB image size cap.
+- Home Assistant Ingress action to rotate exposed CYD snapshot token.
+- P4P relay client remains unchanged; no extra camera wakeups.
+
+
 ## 0.2.2 — message-type diagnostics
 
 - Whitelisted protocol message types, packet sizes and counts separately for wake and stream-negotiation phases.
