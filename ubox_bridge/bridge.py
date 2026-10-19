@@ -131,6 +131,19 @@ class CameraState:
         if len(self.token) < 20:
             raise ValueError("snapshot token damaged")
 
+    def rotate_snapshot_token(self):
+        """Revoke the previously shown LAN snapshot URL immediately."""
+        new_token = secrets.token_urlsafe(24)
+        tmp = DATA / "snapshot_token.new"
+        with open(tmp, "w", encoding="ascii") as handle:
+            os.chmod(tmp, 0o600)
+            handle.write(new_token)
+        os.replace(tmp, DATA / "snapshot_token")
+        with self.lock:
+            self.token = new_token
+        LOG.info("LAN snapshot token rotated")
+        return True, "Token dostępu do CYD został zmieniony."
+
     @property
     def account_configured(self) -> bool:
         return bool(str(self.options.get("account_email", "")).strip()
@@ -430,11 +443,13 @@ class ApiHandler(BaseHTTPRequestHandler):
             self.respond(403, b"Forbidden", "text/plain")
             return
         path = urlsplit(self.path).path
-        if path not in ("/capture", "/discover", "/cloud-capture"):
+        if path not in ("/capture", "/discover", "/cloud-capture", "/rotate-token"):
             self.respond(404, b"Not found", "text/plain")
             return
         if path == "/discover":
             accepted, message = STATE.discover()
+        elif path == "/rotate-token":
+            accepted, message = STATE.rotate_snapshot_token()
         elif path == "/cloud-capture":
             accepted, message = STATE.trigger("cloud")
         else:
@@ -458,7 +473,8 @@ Jeżeli kamera nie wysyła nagrań do chmury, wynik może być pusty.</p>
 <pre id="cloudDiag" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></div>
 <div class="card"><b>Diagnostyka P4P</b><p><small>Odpowiedzi na wybudzanie mogą pochodzić od serwerów UBox — same liczby pakietów nie potwierdzają połączenia z kamerą. Sekcje wake_message_types i stage2_message_types pokazują wyłącznie typy, rozmiary i liczbę pakietów (bez danych prywatnych).</small></p><pre id="diag" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></div><div class="card"><img id="image" alt="Ostatnia klatka"><p id="stamp">Brak zdjęcia</p></div>
 <div class="card"><b>Adres dla CYD (sieć lokalna):</b><p><code id="url"></code></p>
-<small>Zamień IP_HA na lokalny adres Raspberry Pi. Nie udostępniaj URL z tokenem publicznie.</small></div>
+<small>Zamień IP_HA na lokalny adres Raspberry Pi. Nie udostępniaj URL z tokenem publicznie.</small>
+<p><button id="rotate">Unieważnij poprzedni token / wygeneruj nowy</button></p></div>
 <script>let last='';async function refresh(){try{let r=await fetch('status',{cache:'no-store'}),s=await r.json();
 document.getElementById('status').textContent=!s.configured?'Skonfiguruj konto UBox lub ręczne dane P2P.':s.capturing?'Pobieranie obrazu…':s.detecting?'Wykrywanie kamer na koncie UBox…':s.has_image?'Ostatnia klatka dostępna.':'Kliknij Pobierz nową klatkę.';
 document.getElementById('err').textContent=s.last_error||s.discovery_error||'';
@@ -477,6 +493,7 @@ if(s.has_image&&last!==s.last_success){last=s.last_success;document.getElementBy
 document.getElementById('capture').onclick=async()=>{let r=await fetch('capture',{method:'POST'});if(!r.ok)alert('Nie udało się rozpocząć pobierania');refresh()};
 document.getElementById('discover').onclick=async()=>{let r=await fetch('discover',{method:'POST'});if(!r.ok)alert('Nie udało się uruchomić wyszukiwania');refresh()};
 document.getElementById('cloud').onclick=async()=>{let r=await fetch('cloud-capture',{method:'POST'});if(!r.ok)alert('Nie udało się rozpocząć pobierania z chmury');refresh()};
+document.getElementById('rotate').onclick=async()=>{if(!confirm('Poprzedni adres JPEG przestanie działać. Zmienić token?'))return;let r=await fetch('rotate-token',{method:'POST'});if(!r.ok)alert('Nie udało się zmienić tokenu');refresh()};
 refresh();setInterval(refresh,4000);</script></body></html>'''
 
 
