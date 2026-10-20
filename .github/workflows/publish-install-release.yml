@@ -8,7 +8,7 @@ permissions:
   contents: write
 jobs:
   publish:
-    if: ${{ github.event.workflow_run.conclusion }} == 'success' && ${{ github.event.workflow_run.event }} == 'push'
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,13 +38,13 @@ jobs:
             exit 0
           fi
           TAG_SHA=$(gh api "repos/${{ github.repository }}/git/ref/tags/v$VERSION" --jq '.object.sha')
-          if ${{ "$TAG_SHA" == "$SOURCE_SHA" }}; then
+          if [[ "$TAG_SHA" == "$SOURCE_SHA" ]]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           CHANGED=$(git diff --name-only "$TAG_SHA" "$SOURCE_SHA")
           INVALID=$(printf '%s\n' "$CHANGED" | grep -Ev '^$|^docs/|(^|/)README\.md$|^web-installer/index\.html$|^windows-installer/README\.md$|^ubox_bridge/CHANGELOG\.md$|^ha-examples/.*\.yaml$|^scripts/check_docs\.py$|^\.github/workflows/(publish-install-release|validate)\.yml$' || true)
-          if ${{ -n "$INVALID" }}; then
+          if [[ -n "$INVALID" ]]; then
             echo "::error::Existing v$VERSION has non-documentation changes: $INVALID. Bump APP_VERSION/config.yaml/Dockerfile to release code changes."
             exit 1
           fi
