@@ -24,7 +24,7 @@ for source in files:
             continue
         target = (source.parent / fragmentless).resolve()
         links_checked += 1
-        if not target.is_relative_to(ROOT) or not target.is_file():
+        if not target.is_relative_to(ROOT) or not target.exists():
             errors.append(f"{source.relative_to(ROOT)}: dead link -> {reference}")
     if source.name == "README.md" and source.parent == ROOT:
         for file_name in ("docs/INSTALL_HA.md", "docs/CYD_WEB_INSTALL.md",
