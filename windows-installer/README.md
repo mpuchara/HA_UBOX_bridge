@@ -1,4 +1,4 @@
-# Windows — instalator CYD 0.2.7 (portable)
+# Windows — instalator CYD 0.2.8 (portable)
 
 Bez Pythona, PlatformIO ani praw administratora. Wymaga Chrome/Edge, Web Serial, kabla USB do danych i połączenia przeglądarki z internetem (skrypt ESP Web Tools z CDN).
 
@@ -6,15 +6,15 @@ Bez Pythona, PlatformIO ani praw administratora. Wymaga Chrome/Edge, Web Serial,
 
 ## Instalacja
 
-1. Pobierz [UBox CYD 0.2.7 — Release](https://github.com/mpuchara/HA_UBOX_bridge/releases/tag/cyd-v0.2.7-ab3800d8), plik `UBox-CYD-Windows-Browser-Installer.zip`.
+1. Pobierz [UBox CYD 0.2.8 — Release](https://github.com/mpuchara/HA_UBOX_bridge/releases), plik `UBox-CYD-Windows-Browser-Installer.zip`.
 2. **Wypakuj wszystko** do folderu (nie uruchamiaj z podglądu ZIP).
 3. Podłącz CYD przez USB do Windows.
 4. Uruchom `Start-Installer.cmd`. Skrypt `Install-CYD.ps1` uruchamia stronę lokalną pod `http://127.0.0.1:8765` (lub 8766–8770, jeśli port jest zajęty) i otwiera Edge.
-5. Wybierz **ST7789** (sprawdzony na dwuportowej odmianie) albo **ILI9341**. Wybierz faktyczny port płytki; **COM4 to tylko przykład**.
+5. Wybierz w kolejności **ST7789/GPIO27**, a gdy wyświetlacz nie działa, **ST7789/GPIO21** lub **ILI9341/GPIO21**. Wybierz faktyczny port płytki; **COM4 to tylko przykład**.
 6. Nie zamykaj okna konsoli do ukończenia wgrywania. Flashowanie może usunąć poprzednią konfigurację ESP32.
 7. Po restarcie sprawdź test kolorów i połącz się z siecią **CYD / 12345678**. Portal Wi-Fi: **http://192.168.4.1**.
 
-Wpisz domowe Wi-Fi **2,4 GHz**, adres IP hosta Home Assistant (bez `http://` i `:8123`) oraz **sam token** z panelu UBox Bridge. Firmware 0.2.7 wymaga Bridge **0.5.13** dla automatycznej jasności; gesty PTZ działają z Bridge 0.5.10+.
+Wpisz domowe Wi-Fi **2,4 GHz**, adres IP hosta Home Assistant (bez `http://` i `:8123`) oraz **sam token** z panelu UBox Bridge. Firmware 0.2.8 wymaga Bridge **0.5.13** dla automatycznej jasności; gesty PTZ działają z Bridge 0.5.10+.
 
 ## Po instalacji
 

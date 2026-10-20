@@ -24,7 +24,7 @@ jobs:
           SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           test "$(gh api repos/${{ github.repository }}/commits/main --jq .sha)" = "$SOURCE_SHA"
-      - name: Skip publishing when only documentation changed
+      - name: Skip publishing when Home Assistant add-on payload is unchanged
         id: docs
         env:
           GH_TOKEN: ${{ github.token }}
@@ -43,12 +43,12 @@ jobs:
             exit 0
           fi
           CHANGED=$(git diff --name-only "$TAG_SHA" "$SOURCE_SHA")
-          INVALID=$(printf '%s\n' "$CHANGED" | grep -Ev '^$|^docs/|(^|/)README\.md$|^web-installer/index\.html$|^windows-installer/README\.md$|^ubox_bridge/CHANGELOG\.md$|^ha-examples/.*\.yaml$|^scripts/check_docs\.py$|^\.github/workflows/(publish-install-release|validate)\.yml$' || true)
+          INVALID=$(printf '%s\n' "$CHANGED" | grep -Ev '^$|^docs/|(^|/)README\.md$|^web-installer/|^windows-installer/|^firmware/|^tests/test_cyd_firmware_profiles\.py$|^web-installer/index\.html$|^windows-installer/README\.md$|^ubox_bridge/CHANGELOG\.md$|^ha-examples/.*\.yaml$|^scripts/check_docs\.py$|^\.github/workflows/(publish-install-release|validate|cyd-web-installer)\.yml$' || true)
           if [[ -n "$INVALID" ]]; then
-            echo "::error::Existing v$VERSION has non-documentation changes: $INVALID. Bump APP_VERSION/config.yaml/Dockerfile to release code changes."
+            echo "::error::Existing v$VERSION has HA add-on changes: $INVALID. Bump APP_VERSION/config.yaml/Dockerfile to release code changes."
             exit 1
           fi
-          echo "Docs-only change since v$VERSION: retaining existing binaries and release tag."
+          echo "HA add-on payload unchanged since v$VERSION: retaining existing release tag."
           echo "skip=true" >> "$GITHUB_OUTPUT"
       - name: Install packaging tools
         if: steps.docs.outputs.skip != 'true'

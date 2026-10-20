@@ -6,8 +6,10 @@ $files=@{
   '/index.html'='index.html'
   '/manifest.json'='manifest.json'
   '/manifest-ili9341.json'='manifest-ili9341.json'
+  '/manifest-st7789-gpio21.json'='manifest-st7789-gpio21.json'
   '/firmware/ubox-cyd-ili9341.bin'='firmware/ubox-cyd-ili9341.bin'
   '/firmware/ubox-cyd-esp32.bin'='firmware/ubox-cyd-esp32.bin'
+  '/firmware/ubox-cyd-st7789-gpio21.bin'='firmware/ubox-cyd-st7789-gpio21.bin'
   '/firmware/SHA256SUMS.txt'='firmware/SHA256SUMS.txt'
 }
 $types=@{'.html'='text/html; charset=utf-8';'.json'='application/json; charset=utf-8';'.bin'='application/octet-stream';'.txt'='text/plain; charset=utf-8'}

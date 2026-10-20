@@ -1,6 +1,6 @@
 {
-  "name": "UBox CYD Monitor",
-  "version": "0.2.7",
+  "name": "UBox CYD Monitor — ST7789 / BL GPIO27",
+  "version": "0.2.8",
   "new_install_prompt_erase": true,
   "builds": [
     {

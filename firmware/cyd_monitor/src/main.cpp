@@ -16,9 +16,10 @@
 
 // CYD ESP32-2432S028 (ILI9341, 2.8", landscape 320x240).
 // Configuration is stored in ESP32 NVS, NEVER compiled into the firmware.
-static constexpr int TFT_BACKLIGHT_PIN = 21;
+// TFT_BL is provided per board build: dual-USB ST7789 may use GPIO27;
+// other ST7789 / ILI9341 variants often use GPIO21.
+static constexpr int TFT_BACKLIGHT_PIN = TFT_BL;
 static constexpr int LDR_ADC_PIN = 34;
-static constexpr int BACKLIGHT_PWM_CHANNEL = 0;
 static constexpr int BOOT_BUTTON_PIN = 0;
 static constexpr unsigned long REFRESH_MS = 30000UL;
 static constexpr unsigned long PTZ_POLL_MS=2500UL;
@@ -50,6 +51,8 @@ unsigned long dragStartMs=0,gestureNextAllowed=0,ptzImageDeadline=0;
 struct BrightnessAnchor { int raw=-1; int percent=100; };
 BrightnessAnchor lightNight, lightDay;
 bool brightnessCalibrated=false;
+bool backlightPwmReady=false;
+bool brightnessConfigSeen=false; // Prevent NVS calibration dimming unconfigured screen.
 float filteredLdr=0.0f;
 bool ldrValid=false;
 float currentBrightness=100.0f;
@@ -206,6 +209,7 @@ void displaySelfTest() {
   tft.drawRect(0, 0, w, h, TFT_YELLOW);
   tft.setTextColor(TFT_BLACK, TFT_WHITE);
   tft.drawString("ROT " + String(screenRotation), w / 2 + 12, h / 2 + 12, 2);
+  tft.drawString("BL GPIO" + String(TFT_BACKLIGHT_PIN), w / 2 + 8, h / 2 + 62, 2);
 #if defined(ST7789_DRIVER)
   tft.setTextColor(TFT_BLACK, TFT_WHITE);
   tft.drawString("ST7789", w / 2 + 8, h / 2 + 38, 2);
@@ -482,7 +486,7 @@ float brightnessTarget(){
   if(previewPercent>=5&&static_cast<int32_t>(previewUntil-millis())>0)
     return float(previewPercent);
   previewPercent=-1;
-  if(!brightnessCalibrated||!ldrValid)return 100.0f;
+  if(!brightnessConfigSeen||!brightnessCalibrated||!ldrValid)return 100.0f;
   const float ratio=constrain((filteredLdr-lightNight.raw)/
       float(lightDay.raw-lightNight.raw),0.0f,1.0f);
   return constrain(lightNight.percent+ratio*(lightDay.percent-lightNight.percent),
@@ -502,7 +506,8 @@ void updateBrightness(){
   const float delta=constrain(desired-currentBrightness,-0.6f,0.6f);
   currentBrightness=constrain(currentBrightness+delta,5.0f,100.0f);
   const int duty=constrain(int(roundf(currentBrightness*255.0f/100.0f)),13,255);
-  ledcWrite(TFT_BACKLIGHT_PIN,duty);
+  if(backlightPwmReady)ledcWrite(TFT_BACKLIGHT_PIN,duty);
+  else digitalWrite(TFT_BACKLIGHT_PIN,HIGH); // PWM failure must never blank the panel.
 }
 void getBrightnessConfig(){
   if(WiFi.status()!=WL_CONNECTED||haHost.isEmpty()||snapshotToken.isEmpty())return;
@@ -515,6 +520,7 @@ void getBrightnessConfig(){
   if(code==HTTP_CODE_OK){
     StaticJsonDocument<384> doc;
     if(!deserializeJson(doc,http.getStream())){
+      brightnessConfigSeen=true; // Allow calibration only after first valid HA response.
       auto night=doc["night"];
       auto day=doc["day"];
       const bool valid=night.is<JsonObject>()&&day.is<JsonObject>()&&
@@ -570,9 +576,9 @@ void postBrightnessTelemetry(){
 void setup() {
   Serial.begin(115200);
   pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
-  // Arduino-ESP32 3.x LEDC API selects a channel automatically by pin.
-  ledcAttach(TFT_BACKLIGHT_PIN,5000,8);
-  ledcWrite(TFT_BACKLIGHT_PIN,255);
+  // Full brightness before the TFT, Wi-Fi portal, HA or NVS can intervene.
+  pinMode(TFT_BACKLIGHT_PIN,OUTPUT);
+  digitalWrite(TFT_BACKLIGHT_PIN,HIGH);
   pinMode(LDR_ADC_PIN,INPUT);
   analogReadResolution(12);
   analogSetPinAttenuation(LDR_ADC_PIN,ADC_11db);
@@ -582,6 +588,18 @@ void setup() {
   loadSettings();
   tft.init();
   tft.setRotation(screenRotation); // 320x240, default USB at right-lower corner
+  // TFT_eSPI can configure the backlight GPIO during init: attach PWM afterwards.
+  digitalWrite(TFT_BACKLIGHT_PIN,HIGH);
+  backlightPwmReady=ledcAttach(TFT_BACKLIGHT_PIN,5000,8); // Arduino-ESP32 3.x
+  if(backlightPwmReady)ledcWrite(TFT_BACKLIGHT_PIN,255);
+  else {pinMode(TFT_BACKLIGHT_PIN,OUTPUT);digitalWrite(TFT_BACKLIGHT_PIN,HIGH);}
+#if defined(ST7789_DRIVER)
+  Serial.printf("CYD LCD ST7789, BL GPIO%d, PWM=%s\n",TFT_BACKLIGHT_PIN,
+                backlightPwmReady?"ok":"fallback high");
+#else
+  Serial.printf("CYD LCD ILI9341, BL GPIO%d, PWM=%s\n",TFT_BACKLIGHT_PIN,
+                backlightPwmReady?"ok":"fallback high");
+#endif
   displaySelfTest();
   touchSPI.begin(25,39,32,33);
   touchReady=touch.begin(touchSPI);

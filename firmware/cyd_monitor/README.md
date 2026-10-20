@@ -1,4 +1,4 @@
-# CYD Monitor — firmware 0.2.7
+# CYD Monitor — firmware 0.2.8
 
 **Obsługiwany sprzęt:** ESP32-2432S028 (2,8″, 240×320) z dotykiem XPT2046. **Zalecany dodatek Home Assistant: UBox Bridge 0.5.13**; dla gestów PTZ minimum 0.5.10.
 
@@ -10,15 +10,15 @@
 - Odpytuje bufor HA co 30 s z `If-None-Match` / ETag; sprawdzenie nie budzi kamery LTE.
 - Rozpoznaje gesty lewo/prawo/góra/dół na XPT2046 i wywołuje w HA krótki ruch PTZ + STOP + odświeżenie klatki. Po ruchu sprawdza zdjęcie co 2,5 s do 110 s.
 - Zachowuje kalibrację dotyku i konfigurację Wi-Fi w pamięci NVS.
-- Ma dwie wersje sterownika: **ST7789** (pierwszy test na dwuportowej płytce) oraz **ILI9341** (alternatywa).
+- Ma trzy profile: **ST7789/GPIO27**, **ST7789/GPIO21** oraz **ILI9341/GPIO21**. Rewizje z dwoma gniazdami USB różnią się pinem podświetlenia.
 
 ## Instalacja z przeglądarki / Windows ZIP
 
 Otwórz **https://mpuchara.github.io/HA_UBOX_bridge/** w Chrome/Edge na komputerze z podłączonym ESP32. Wybierz ST7789 albo ILI9341 i poprawny port COM.
 
-Jeśli strona jest niedostępna lub potrzebujesz instalatora lokalnego, pobierz [CYD 0.2.7 — Windows ZIP](https://github.com/mpuchara/HA_UBOX_bridge/releases/tag/cyd-v0.2.7-ab3800d8), wypakuj i uruchom `Start-Installer.cmd`. Instrukcja: [CYD_WEB_INSTALL.md](../../docs/CYD_WEB_INSTALL.md).
+Jeśli strona jest niedostępna lub potrzebujesz instalatora lokalnego, pobierz [CYD 0.2.8 — Windows ZIP](https://github.com/mpuchara/HA_UBOX_bridge/releases), wypakuj i uruchom `Start-Installer.cmd`. Instrukcja: [CYD_WEB_INSTALL.md](../../docs/CYD_WEB_INSTALL.md).
 
-Po pierwszym uruchomieniu sprawdź **cztery pola kolorów**. Jeżeli obraz jest wadliwy, zmień wariant sterownika, zanim zaczniesz diagnozować kamerkę.
+Po pierwszym uruchomieniu sprawdź **cztery pola kolorów**. W białym polu wyświetla się używany pin podświetlenia. Ekran jest włączony na 100% jeszcze bez sieci HA. Jeśli mimo tego jest czarny, ale widzisz Wi-Fi `CYD`, przetestuj drugi profil GPIO. Jeżeli obraz jest wadliwy, zmień wariant sterownika, zanim zaczniesz diagnozować kamerkę.
 
 ## Konfiguracja Wi-Fi
 
@@ -42,7 +42,7 @@ Gest po zdjęciu >~38 px w jednym kierunku = **jeden ruch** (nie ciągły joysti
 
 ## Podświetlenie LCD / czujnik LDR
 
-Od firmware 0.2.7 GPIO21 steruje podświetleniem przez PWM, a GPIO34 (ADC1) mierzy fotorezystor. Po założeniu obudowy w panelu UBox Bridge wybierz dwa punkty **Noc** i **Dzień**, zapisując faktyczny odczyt i wybrany procent jasności. ESP32 interpoluje pomiędzy nimi, wygładza pomiar i zapisuje punkty w NVS. [Kalibracja krok po kroku](../../docs/BRIGHTNESS_CALIBRATION.md).
+Od firmware 0.2.8 GPIO21 steruje podświetleniem przez PWM, a GPIO34 (ADC1) mierzy fotorezystor. Po założeniu obudowy w panelu UBox Bridge wybierz dwa punkty **Noc** i **Dzień**, zapisując faktyczny odczyt i wybrany procent jasności. ESP32 interpoluje pomiędzy nimi, wygładza pomiar i zapisuje punkty w NVS. [Kalibracja krok po kroku](../../docs/BRIGHTNESS_CALIBRATION.md).
 
 ## Kompilacja ze źródeł
 
@@ -52,11 +52,11 @@ Projekt PlatformIO: [platformio.ini](platformio.ini). W katalogu głównym repo:
 pio run -d firmware/cyd_monitor
 ~~~
 
-Środowiska: `esp32-2432s028` (**ST7789**), `esp32-2432s028-ili9341` (**ILI9341**).
+Środowiska: `esp32-2432s028` (**ST7789/GPIO27**), `esp32-2432s028-st7789-gpio21` (**ST7789/GPIO21**), `esp32-2432s028-ili9341` (**ILI9341/GPIO21**).
 
 | Podzespół | GPIO |
 | --- | --- |
-| TFT: MOSI/MISO/CLK/CS/DC/BL | 13/12/14/15/2/21 |
+| TFT: MOSI/MISO/CLK/CS/DC/BL | 13/12/14/15/2/27 lub 21 (według profilu) |
 | Touch: CLK/MISO/MOSI/CS/IRQ | 25/39/32/33/36 |
 | BOOT | 0 |
 

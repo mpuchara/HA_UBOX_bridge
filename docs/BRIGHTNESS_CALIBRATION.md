@@ -1,6 +1,6 @@
 # CYD — automatyczna jasność i kalibracja fotorezystora
 
-**Wymaga UBox Bridge 0.5.13+ i CYD firmware 0.2.7+**. Sterowanie działa na GPIO21 (PWM), a odczyt z fotorezystora na GPIO34 (ADC1). Warianty ST7789 i ILI9341 mają ten sam mechanizm. Obecność działającego LDR w konkretnym egzemplarzu wymaga sprawdzenia odczytów na urządzeniu.
+**Wymaga UBox Bridge 0.5.13+ i CYD firmware 0.2.8+**. PWM podświetlenia działa na GPIO27 w wariancie ST7789/Rv3 lub na GPIO21 w pozostałych dwóch profilach. LDR jest odczytywany na GPIO34 (ADC1), jeśli ta rewizja ma czujnik. Obecność działającego LDR w konkretnym egzemplarzu wymaga sprawdzenia odczytów na urządzeniu.
 
 [← README](../README.md) · [Instalacja CYD](CYD_WEB_INSTALL.md) · [Panel](USER_GUIDE.md)
 
@@ -10,7 +10,7 @@ Czujnik reaguje na **rzeczywiste oświetlenie przy ekranie**, także na zachmurz
 
 ## Kalibracja dwóch punktów krok po kroku
 
-1. Zainstaluj **UBox Bridge 0.5.13** oraz wgraj **CYD 0.2.7** (właściwy sterownik LCD ST7789/ILI9341). Połącz CYD z Wi-Fi i HA jak dotąd.
+1. Zainstaluj **UBox Bridge 0.5.13** oraz wgraj **CYD 0.2.8** (właściwy sterownik LCD ST7789/ILI9341). Połącz CYD z Wi-Fi i HA jak dotąd.
 2. Otwórz w Home Assistant panel **UBox Bridge → Automatyczna jasność CYD**. Powinieneś zobaczyć liczbowy **Odczyt LDR: 0–4095** i bieżący procent jasności LCD. Jeśli widzisz „Brak odczytu”, sprawdź firmware i sieć.
 3. **W nocy**, przy docelowym oświetleniu pomieszczenia, przesuń suwak „🌙 Noc”, np. do **8–15%**. Kliknij **Wypróbuj na 30 s** i obejrzyj fizyczny ekran. Dopasuj suwak do komfortowej jasności.
 4. Gdy jasność pasuje, kliknij **Zapisz noc przy obecnym pomiarze**. Bridge zapisze obecną wartość ADC oraz wybrany procent (np. `ADC 2870 → 10%`).
@@ -37,8 +37,8 @@ Między punktami używana jest **interpolacja liniowa z ograniczeniem** do warto
 
 ## Ograniczenia i pamięć
 
-- **Przed zakończeniem obu kalibracji** jasność wynosi 100%, z wyjątkiem tymczasowych testów.
-- Kalibracja jest przechowywana w HA: `/data/brightness.json` i kopiowana do pamięci NVS ESP32. Po restarcie i chwilowym braku HA regulacja nadal działa na zapisanych nastawach.
+- **Do pierwszego poprawnego odczytu konfiguracji jasności z HA** firmware wymusza 100% podświetlenia (również z wcześniejszą konfiguracją NVS). Po synchronizacji i przy braku dwóch punktów kalibracji, jasność pozostaje 100%, poza próbami w panelu.
+- Kalibracja jest przechowywana w HA: `/data/brightness.json` i kopiowana do pamięci NVS ESP32. Po restarcie i przed pierwszą synchronizacją HA jasność wynosi 100% dla czytelności. Po synchronizacji zapisane nastawy działają lokalnie nawet przy chwilowym braku HA.
 - Czujnik raportuje przez lokalne Wi-Fi mniej więcej co 10 s. Odczyty nie są wysyłane do kamery LTE.
 - Panel HA przyjmuje komendy kalibracji **wyłącznie przez Ingress**; zewnętrzne API 8100 przyjmuje tylko telemetrię i wydaje konfigurację z prawidłowym tokenem.
 - Przy bardzo małej różnicy odczytów wewnątrz obudowy AUTO może reagować na szum ADC. Jeśli tak się dzieje, wybierz jasność noc/dzień przy wyraźnie odmiennym świetle lub odsłoń okienko LDR.
