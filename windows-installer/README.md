@@ -1,28 +1,27 @@
-# Local Windows installer (no GitHub Pages required)
+# Windows — instalator CYD 0.2.6 (portable)
 
-1. Download the ZIP from the CYD installer GitHub Release or from a completed
-   **Build and publish CYD browser installer** workflow artifact.
-2. Extract all files to one folder (do not run from ZIP preview).
-3. Connect classic ESP32-2432S028 CYD via USB.
-4. Double-click `Start-Installer.cmd`. This runs the checked-in
-   `Install-CYD.ps1`, which starts a GET-only file server bound to
-   **127.0.0.1**, opens Edge at `http://127.0.0.1:8765`.
-5. Select COM4 in ESP Web Tools and confirm firmware flashing.
-6. After reboot the device displays a randomized setup hotspot password;
-   use `http://192.168.4.1` to set 2.4GHz Wi-Fi, HA IP and snapshot token.
+Bez Pythona, PlatformIO ani praw administratora. Wymaga Chrome/Edge, Web Serial, kabla USB do danych i połączenia przeglądarki z internetem (skrypt ESP Web Tools z CDN).
 
-No Python, PlatformIO or admin permissions are needed. Browser must have
-internet access to load ESP Web Tools from unpkg.com. Loopback is a
-potentially trustworthy Web Serial origin in modern Chrome/Edge.
+[← README](../README.md) · [Pełna instrukcja CYD](../docs/CYD_WEB_INSTALL.md)
 
-**Security:** USB flashing overwrites the existing application and may
-erase the current ESP32 configuration. The local HTTP server accepts only
-GET requests for a fixed allowlist of bundled paths and binds exclusively
-to loopback. Review scripts before running.
+## Instalacja
 
-## 0.2.5: choose the LCD controller
+1. Pobierz [UBox CYD 0.2.6 — Release](https://github.com/mpuchara/HA_UBOX_bridge/releases/tag/cyd-v0.2.6-fe27042c), plik `UBox-CYD-Windows-Browser-Installer.zip`.
+2. **Wypakuj wszystko** do folderu (nie uruchamiaj z podglądu ZIP).
+3. Podłącz CYD przez USB do Windows.
+4. Uruchom `Start-Installer.cmd`. Skrypt `Install-CYD.ps1` uruchamia stronę lokalną pod `http://127.0.0.1:8765` (lub 8766–8770, jeśli port jest zajęty) i otwiera Edge.
+5. Wybierz **ST7789** (sprawdzony na dwuportowej odmianie) albo **ILI9341**. Wybierz faktyczny port płytki; **COM4 to tylko przykład**.
+6. Nie zamykaj okna konsoli do ukończenia wgrywania. Flashowanie może usunąć poprzednią konfigurację ESP32.
+7. Po restarcie sprawdź test kolorów i połącz się z siecią **CYD / 12345678**. Portal Wi-Fi: **http://192.168.4.1**.
 
-The local install page now offers **ST7789** (recommended as first test for
-this two-USB ESP32-2432S028 PCB) and **ILI9341** (fallback). The ZIP contains
-both binary images and manifests. Use a clean four-color test after flashing.
-The setup AP is `CYD`/`12345678`; this is a weak, user-requested password.
+Wpisz domowe Wi-Fi **2,4 GHz**, adres IP hosta Home Assistant (bez `http://` i `:8123`) oraz **sam token** z panelu UBox Bridge. Firmware 0.2.6 wymaga Bridge **0.5.10+** dla PTZ (zalecany **0.5.12**).
+
+## Po instalacji
+
+CYD pobiera zdjęcia 320×240 z cache HA bez budzenia LTE. Przy pierwszym starcie skalibruj 3 punkty dotyku. Gesty na zdjęciu sterują PTZ. BOOT 2–4 s uruchamia ponowną kalibrację, ≥5 s resetuje Wi-Fi/HA. Opis: [CYD_WEB_INSTALL.md](../docs/CYD_WEB_INSTALL.md).
+
+## Bezpieczeństwo
+
+Lokalny serwer HTTP działa **tylko na 127.0.0.1** i akceptuje tylko GET do dozwolonych plików instalacyjnych. Nie przechwytuje haseł ani tokenów; użytkownik wpisuje je dopiero w konfiguratorze CYD. Wi-Fi `CYD / 12345678` ma słabe hasło — konfiguruj wyłącznie w zaufanym miejscu.
+
+Jeśli przeglądarka nie widzi portu: sprawdź przewód USB z transmisją danych, sterownik USB-serial, uprawnienia Chrome/Edge i zamknij inne aplikacje używające COM.

@@ -1,54 +1,88 @@
-# UBox Bridge — Home Assistant OS / CYD
+# UBox Bridge 0.5.12 — architektura i HTTP API
 
-The XEGA XG-01-EU4G was able to deliver HEVC live video with
-the asyrk/ubox-web P4P transport (one tested capture: 17 video frames,
-218581 bytes raw and 20129-byte 320×240 JPEG).
+[← README](../README.md) · [Instrukcja obsługi](../docs/USER_GUIDE.md) · [Bezpieczeństwo](../docs/SECURITY.md)
 
-## Scheduling
+## Komponenty
 
-The HA add-on takes a new photo every `interval_minutes` (0=disabled).
-Scheduling starts when the add-on starts; first scheduled capture occurs
-after that interval. Set `capture_on_start: true` for an immediate capture
-after boot. Captures do not overlap. A failed capture leaves the last
-working JPEG intact, with a visible error and success timestamp.
+- `bridge.py` — stan, token, harmonogram, dwa serwery HTTP.
+- `capture_live.js` — krótki odbiór P4P przez przypięty commit [asyrk/ubox-web](https://github.com/asyrk/ubox-web).
+- `ptz_move.js` — impuls PTZ i STOP po P4P. Protokół nieoficjalny.
+- `cloud_api.py` — wykrywanie kamery z konta UBox.
+- `video_profiles.py` — `hd`→streamIndex 1; `sd`→0; `manual`→`stream_index`.
+- `frame_quality.py` — wybór spośród zdekodowanych klatek.
+- `image_filters.py` — skalowanie/kadrowanie do 320×240.
+- FFmpeg/FFprobe — dekodowanie i weryfikacja rzeczywistej rozdzielczości.
 
-The CYD should request the last cached JPEG every 30s via local
-Wi-Fi. It **does not** trigger the camera, saving data and battery.
-The endpoint returns ETag and HTTP 304 for unchanged photos.
-Metadata is available from `/snapshot-meta.json` (token required).
+```text
+Zdarzenie: przycisk / harmonogram / po PTZ
+  → P4P/HEVC/H264 → do 18 kandydatów do oceny jakości
+  → ponowny dekod wybranej klatki w rozdzielczości źródła
+  → /data/last.jpg (bez obrotu, natywna rozdzielczość)
+  → /data/last_cyd_wide.jpg (320×240, blur/cover/contain)
+  → HTTP: panel HA, CYD, Generic Camera/Android
+```
 
-## Authentication
+Nie odtwarzamy obrazu z brakujących pakietów LTE. Odpytanie cache przez HTTP nie rozpoczyna połączenia P4P.
 
-Port 8099 is Ingress only (HA Supervisor proxy). Port 8100 provides token-protected JPEG and metadata GET endpoints, and
-only one bounded PTZ POST endpoint guarded by an X-UBox-Token header. The token can be rotated
-from the Ingress panel. Never expose the port on a WAN router.
-The UBox account password remains in HA add-on local options. Do not
-commit or screenshot passwords or the token.
+## Porty i operacje
 
-## Firmware
+| Port | Metoda i adres | Autoryzacja | Efekt |
+| --- | --- | --- | --- |
+| 8099 | GET `/`, `/status` | Tylko HA Ingress | Panel i status (token widoczny dla zalogowanego panelu). |
+| 8099 | POST `/capture`, `/discover`, `/rotate-token` | Ingress | Zdjęcie, wykrywanie kamery, zmiana tokenu. |
+| 8099 | POST `/framing` | Ingress | Zmiana kadru i lokalne przeliczenie. |
+| 8099 | POST `/ptz` | Ingress | Ruch i nowe zdjęcie. |
+| 8100 | GET `/health` | Publiczne w LAN | Stan serwera. |
+| 8100 | GET `/snapshot.jpg` | Token | Źródłowe JPEG. |
+| 8100 | GET `/snapshot-cyd-wide.jpg` | Token | 320×240 dla aktualnego CYD. |
+| 8100 | GET `/snapshot-cyd.jpg` | Token | Starszy pionowy JPEG. |
+| 8100 | GET `/snapshot-meta.json` | Token | Metadane bez haseł/UID. |
+| 8100 | POST `/ptz` | **Token w nagłówku** | Tylko `left/right/up/down`. |
 
-The PlatformIO project in `firmware/cyd_monitor` uses the TFT_eSPI
-and TJpg_Decoder libraries. Board ESP32-2432S028 versions can have
-different TFT/backlight pins, so check the board revision if the
-display remains blank. Use the UBox Bridge panel to generate a new
-token if an old URL has been shared.
+Odczyty GET obsługują nagłówek `X-UBox-Token` **lub** parametr URL `?token=…` (Generic Camera). JPEG zwraca `ETag` i `304 Not Modified` przy braku zmian.
 
-## Source
+Przykładowa komenda PTZ w zaufanym LAN:
 
-UBox live bridge comes from the pinned asyrk/ubox-web 2026-09-10
-commit. Upstream's author says the implementation is experimental and
-not fully security-audited.
+~~~http
+POST /ptz HTTP/1.1
+Host: IP_HA:8100
+X-UBox-Token: TOKEN
+Content-Type: application/json
 
-## Phone UI and framing
+{"direction":"right"}
+~~~
 
-In UBox Bridge v0.5.12 the one-shot photo appears first, followed by PTZ
-arrows and the Blur/Cover/Contain dropdown. Panel changes to the framing
-persist under /data/framing.json and are applied from the cached native
-JPEG without LTE traffic. This file overrides the old addon configuration
-fit values once a panel choice is made.
+Odpowiedź `202` = przyjęto; `400` = nieprawidłowy kierunek; `401` = brak tokenu; `409` = zajęty; `429` = odstęp ochronny między ruchami. **To nie gwarantuje fizycznego obrotu silnika.** Kierunki i STOP mogą różnić się reakcją na różnych firmware XEGA.
 
-For Home Assistant Android Picture widgets, register a Generic Camera
-entity with /snapshot-cyd-wide.jpg?token=... on the HA LAN and select the
-entity in the HA companion widget. HA Core proxies the JPEG, so external
-access works through your existing authenticated HA endpoint, not 8100.
-See docs/ANDROID_WIDGET.md for HA-native PTZ scripts and a phone dashboard.
+**Kadrowanie** (tylko autoryzowany panel Ingress) przyjmuje:
+
+~~~json
+{"mode":"cover","focus":50}
+~~~
+
+`mode` = `blur` / `cover` / `contain`, `focus` = 0–100 (int). Po udanym przeliczeniu `last_cyd_wide.jpg` i zapisaniu `/data/framing.json` nowy ETag jest dostępny od razu; nie budzi LTE. Wariant poziomy **nie obraca** źródłowej klatki.
+
+## Pliki trwałe
+
+| Ścieżka | Rola |
+| --- | --- |
+| `/data/last.jpg` | Natywny obraz HA. |
+| `/data/last_cyd_wide.jpg` | Obraz 320×240 dla CYD/widgetu. |
+| `/data/last_cyd.jpg` | Starsza kompatybilność. |
+| `/data/last_metadata.json` | Rozdzielczość i indeks strumienia. |
+| `/data/framing.json` | Wybór kadru z panelu, **ważniejszy od `config.yaml`**. |
+| `/data/snapshot_token` | Sekret dla obrazów i PTZ. |
+
+## Sterowanie PTZ
+
+Domyślny impuls `ptz_pulse_ms: 100` i prędkość `ptz_speed: 1`, zakresy odpowiednio 60–350 ms i 1–8. IOCTRL `0x1001`: 12 bajtów; prędkość w bajcie 2, kierunek w bajcie 5, STOP = 12 zerowych bajtów. Kody: up 1, down 2, right 3, left 6. Po STOP startuje nowa sesja pobrania obrazu. Źródło mapowania: [ubox-p4p IOCTRLS](https://github.com/mahumadad/ubox-p4p/blob/main/docs/IOCTRLS.md).
+
+## Testy / wydawanie
+
+- `python -m unittest discover -s tests -v` — testy API i logiki.
+- `python scripts/package.py` — archiwa; wymaga PyYAML.
+- `pio run -d firmware/cyd_monitor` — kompilacja CYD ST7789 i ILI9341.
+- GitHub Actions: [walidacja](../.github/workflows/validate.yml), [web-installer](../.github/workflows/cyd-web-installer.yml).
+- Wydania eksperymentalne: [GitHub Releases](https://github.com/mpuchara/HA_UBOX_bridge/releases).
+
+**Bezpieczeństwo:** 8100 dostępny wyłącznie w zaufanym LAN; token pozwala również ruszać kamerą. Nie wstawiaj tokenów, haseł P2P ani kont UBox do repozytorium. Aby udostępnić obraz poza domem, używaj proxy Home Assistant / VPN, nie 8100.

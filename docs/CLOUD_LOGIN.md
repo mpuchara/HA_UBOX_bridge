@@ -1,11 +1,20 @@
-# UBox cloud login implementation
+# Logowanie i wykrywanie kamery UBox
 
-Based on independently documented UBox API interactions, not an official SDK:
-- POST https://portal.ubianet.com/api/v3/login
-- POST https://portal.ubianet.com/api/v2/user/device_list
+[← README](../README.md) · [Instalacja HA](INSTALL_HA.md) · [Problemy](TROUBLESHOOTING.md)
 
-A login session is used to read camera metadata and device authentication information for accessing your own cameras. The token and camera password are held in memory only; the Home Assistant options contain the account login locally (HA add-on configuration). No password or token is returned from the dashboard status API. HTTPS certificate verification is enabled.
+W panelu konfiguracyjnym UBox Bridge dostępne są dwie metody połączenia:
 
-When one device exists, it is selected automatically. With multiple devices, set uid in the add-on configuration. If the account authenticates through Google/Apple rather than email/password, this mode may not work.
+1. **Konto UBox** — `account_email` + `account_password`. Przy jednej kamerze dodatek może wybrać ją samodzielnie. Przy wielu wpisz dodatkowo `uid` wybranego urządzenia.
+2. **Ręczny P2P** — `uid` + `device_password`. Hasło urządzenia nie musi być identyczne z hasłem konta UBox.
 
-A camera snapshot still requires P4P video capture via the pinned upstream client. Compatibility with XEGA XG-01-EU4G, firmware 2068.0.13.47, remains untested. Cloud API changes can break discovery. Avoid aggressive polling on solar devices.
+Przycisk **Wykryj kamerę** korzysta z nieoficjalnie udokumentowanych endpointów chmury:
+- `POST https://portal.ubianet.com/api/v3/login` — uwierzytelnienie konta.
+- `POST https://portal.ubianet.com/api/v2/user/device_list` — lista przypisanych urządzeń.
+
+Nie jest to oficjalne SDK. Logowanie przez Google/Apple w aplikacji UBox może nie działać poprzez ten formularz e-mail/hasło. Loginy i hasła zapisane są lokalnie w konfiguracji dodatku HA; panel statusu nie zwraca ich publicznie. HTTPS weryfikuje certyfikat.
+
+Samo odkrycie urządzenia **nie oznacza jeszcze sukcesu odbioru wideo**. Właściwe zdjęcie wymaga nawiązania sesji P4P przez bibliotekę ubox-web. Obsługa XEGA XG-01-EU4G była testowana w projekcie, ale inne rewizje firmware i zmiany serwerów chmurowych nie są gwarantowane.
+
+**Rozwiązywanie problemów:** sprawdź, czy aplikacja UBox loguje się na konto, czy kamera jest przypisana do tego konta, czy wpisano prawidłowy UID (w razie wielu kamer) i czy HA ma internet. Gdy chmura nie obsługuje sposobu logowania, rozważ ręczny UID+hasło P2P.
+
+**Bezpieczeństwo:** nie publikuj kont, haseł, UID, tokenu snapshotów ani pełnych adresów `?token=…`. Token UBox Bridge to osobny sekret — służy do pobierania zdjęć i sterowania PTZ.
