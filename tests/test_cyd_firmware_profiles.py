@@ -21,6 +21,18 @@ class CydFirmwareProfilesTest(unittest.TestCase):
             payload=json.loads((ROOT / "web-installer" / manifest).read_text())
             self.assertEqual(payload["version"],"0.2.8")
             self.assertEqual(payload["builds"][0]["chipFamily"],"ESP32")
+    def test_windows_server_serves_every_manifest_and_binary(self):
+        server=(ROOT / "windows-installer/Install-CYD.ps1").read_text()
+        for name in (
+            "manifest.json",
+            "manifest-st7789-gpio21.json",
+            "manifest-ili9341.json",
+            "ubox-cyd-esp32.bin",
+            "ubox-cyd-st7789-gpio21.bin",
+            "ubox-cyd-ili9341.bin",
+        ):
+            self.assertIn("/" + name if name.startswith("manifest") else "/firmware/" + name,server)
+
     def test_safe_startup_brightness(self):
         cpp=(ROOT / "firmware/cyd_monitor/src/main.cpp").read_text()
         boot=cpp.split("void setup() {")[1].split("tft.init();")[0]
