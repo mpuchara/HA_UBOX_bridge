@@ -23,14 +23,15 @@
 <main>
   <div class="tag">Home Assistant · XEGA 4G · ESP32-2432S028</div>
   <h1>UBox CYD — instalator</h1>
-  <p class="subtitle">Wgraj firmware jednym kliknięciem przez USB. Nie potrzebujesz VS Code ani PlatformIO.</p>
+  <p class="subtitle">Firmware <strong>0.2.6</strong> · zgodny z UBox Bridge <strong>0.5.12</strong> · ekran 320×240 i dotykowe gesty PTZ. Nie potrzebujesz VS Code ani PlatformIO.</p>
+  <p><a href="https://github.com/mpuchara/HA_UBOX_bridge/blob/main/docs/CYD_WEB_INSTALL.md">Pełna instrukcja instalacji CYD</a> · <a href="https://github.com/mpuchara/HA_UBOX_bridge/blob/main/docs/TROUBLESHOOTING.md">Rozwiązywanie problemów</a></p>
   <section class="panel">
     <h2>1. Wybierz właściwy sterownik ekranu</h2>
-    <p><b>Na zdjęciu Twoja płytka ma dwa USB. Najpierw spróbuj ST7789.</b> Błędny sterownik może wyświetlać tylko fragment obrazu albo zostawiać stare pasy pikseli.</p>
+    <p>Dla klasycznej płytki <b>ESP32-2432S028 z dwoma USB</b> najpierw wypróbuj <b>ST7789</b>. Jeśli pola testowe lub JPEG wyświetlają się niepoprawnie, sprawdź <b>ILI9341</b>. Nie instaluj na ESP32-S3/P4 ani innych niezgodnych płytkach.</p>
     <ol>
       <li>Podłącz CYD przez USB do komputera.</li>
       <li>Otwórz stronę w <b>Chrome lub Edge na Windows</b> i kliknij „Połącz / Zainstaluj”.</li>
-      <li>Wybierz port płytki (u Ciebie <b>COM4</b>) i zaakceptuj instalację.</li>
+      <li>Wybierz port płytki (np. <b>COM4</b>, ale numer może być inny) i zaakceptuj instalację.</li>
       <li>Poczekaj na zakończenie wgrywania. Nie odłączaj urządzenia podczas flashowania.</li>
     </ol>
     <h3>Opcja A — ST7789 (zalecana dla płytki z 2 USB)</h3>
@@ -48,24 +49,26 @@
   <section class="panel">
     <h2>2. Skonfiguruj przez Wi-Fi</h2>
     <ol>
-      <li>Po restarcie ekran CYD pokaże własną sieć <code>CYD</code> z hasłem <code>12345678</code>.</li>
+      <li>Po pierwszym starcie, jeśli firmware poprosi, skalibruj dotyk kolejno na <b>trzech żółtych krzyżykach</b>. Podczas konfiguracji CYD pokaże sieć <code>CYD</code> z hasłem <code>12345678</code>.</li>
       <li>Połącz telefon lub komputer z tą siecią Wi-Fi.</li>
       <li>Jeśli strona ustawień nie otworzy się automatycznie, wpisz <code>http://192.168.4.1</code>.</li>
       <li>Wybierz swoją domową sieć Wi-Fi <b>2,4 GHz</b> i wpisz jej hasło.</li>
-      <li>W polach dodatkowych wpisz <b>IP Raspberry Pi z HA</b> (np. <code>192.168.1.100</code>, bez <code>:8123</code>) oraz <b>token zdjęć z UBox Bridge</b>.</li>
+      <li>W polach dodatkowych wpisz <b>IP Raspberry Pi z HA</b> (np. <code>192.168.1.100</code>, bez <code>http://</code> i portów <code>:8123</code>/<code>:8100</code>) oraz <b>sam token UBox Bridge</b> z panelu HA → Zaawansowane.</li>
       <li>Zapisz. CYD przełączy się na domowe Wi-Fi i pobierze ostatni JPEG z Home Assistanta.</li>
     </ol>
     <p class="muted">Ustawienia Wi-Fi, HA i token zapisywane są lokalnie w pamięci ESP32. Nie są przesyłane do tej witryny. Hasło AP 12345678 jest łatwe do odgadnięcia — konfiguruj wyłącznie w zaufanym miejscu.</p>
   </section>
   <section class="panel">
-    <h2>3. Aktualizowanie zdjęcia</h2>
-    <p>Home Assistant wykonuje nowe zdjęcie według <code>interval_minutes</code> (np. 15 minut). CYD sprawdza zapisany obraz co 30 sekund — bez wybudzania kamery LTE. Jeśli obraz się nie zmienił, pobieranie zakończy się HTTP 304.</p>
-    <p>Utrzymuj CYD i Raspberry Pi w jednej sieci lokalnej. Port <code>8100</code> dodatku UBox Bridge musi być osiągalny z CYD.</p>
+    <h2>3. Zdjęcie i sterowanie dotykiem</h2>
+    <p>Bridge pokazuje w HA jedno zdjęcie na górze, pod nim strzałki PTZ i rozwijaną listę kadrowania <b>Blur / Cover / Contain</b>. Wybór kadrowania przelicza zdjęcie zapisane w HA, nie budzi LTE.</p>
+    <p>CYD pobiera <code>/snapshot-cyd-wide.jpg</code> w poziomie 320×240 i sprawdza go co 30 sekund (ETag/HTTP 304). Przeciągnięcie palcem w lewo/prawo/górę/dół wysyła jeden krótki ruch PTZ, STOP i żądanie nowego zdjęcia. Przy słabym LTE odświeżenie może potrwać.</p>
+    <p>Gdy ruchy są zbyt duże, w konfiguracji dodatku HA zmniejsz <code>ptz_pulse_ms</code> z 100 do 60 (prędkość <code>ptz_speed: 1</code>). Nie próbuj wykonywać wielu ruchów naraz.</p>
+    <p>CYD musi mieć dostęp do Raspberry Pi na <b>TCP 8100 w zaufanym LAN</b>. Nie przekierowuj tego portu na internet.</p>
   </section>
   <section class="panel warn">
     <h2>Zmiana sieci Wi-Fi lub tokenu</h2>
-    <p>Przy działającym CYD przytrzymaj przycisk <b>BOOT przez około 5 sekund</b>, by wyczyścić lokalną konfigurację i ponownie uruchomić kreator Wi-Fi. <b>Nie przytrzymuj BOOT podczas resetowania</b> — to przełącza ESP32 w tryb programowania.</p>
-    <p>Jeżeli zmienisz token w panelu UBox Bridge, musisz wpisać nowy na CYD.</p>
+    <p>Podczas normalnej pracy: <b>krótki BOOT</b> obraca ekran o 180°, <b>2,1–4,9 s</b> uruchamia ponowną kalibrację dotyku, a <b>co najmniej 5 s</b> resetuje Wi-Fi, IP hosta i token. <b>Nie przytrzymuj BOOT podczas resetowania</b> — ESP32 może wejść w tryb programowania.</p>
+    <p>Jeżeli zmienisz token w panelu UBox Bridge, wpisz nowy na CYD oraz w Generic Camera / skryptach HA dla Androida. AP <code>CYD / 12345678</code> jest zabezpieczony słabym, łatwym do odgadnięcia hasłem — konfiguruj w domu i zakończ pracę AP po połączeniu.</p>
   </section>
   <footer>
     Projekt: <a href="https://github.com/mpuchara/HA_UBOX_bridge">mpuchara/HA_UBOX_bridge</a> ·
