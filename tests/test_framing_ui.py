@@ -106,7 +106,7 @@ class FramingTests(unittest.TestCase):
                     try:
                         # Unauthenticated LAN route must NEVER allow settings change.
                         with patch.object(bridge,"SNAPSHOT_PORT",server.server_port):
-                            self.assertEqual(send("/framing",{"mode":"cover","focus":50})[0],404)
+                            self.assertEqual(send("/framing",{"mode":"cover","focus":50})[0],403)
                         with patch.object(bridge,"INGRESS_PORT",server.server_port):
                             self.assertEqual(send("/framing",{"mode":"contain","focus":50})[0],403)
                             with patch.dict(os.environ,{"UBOX_TEST_INGRESS":"1"}):
