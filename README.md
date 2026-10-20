@@ -1,169 +1,67 @@
-# HA UBox Bridge
+# UBox Bridge — kamera UBox/XEGA w Home Assistant, CYD i Androidzie
 
-## CYD — flash jednym kliknięciem (USB / COM4)
+**Aktualny zestaw:** UBox Bridge **0.5.12** (Home Assistant OS) + CYD Monitor **0.2.6** (ESP32-2432S028). Projekt jest eksperymentalny i nie jest oficjalną integracją UBox/XEGA.
 
-[Otwórz instalator CYD przez Chrome/Edge](https://mpuchara.github.io/HA_UBOX_bridge/) — instalator ESP Web Tools, a następnie konfiguracja Wi-Fi, adresu HA i tokenu UBox przez własny hotspot ESP32. **Jeżeli strona jeszcze nie jest dostępna, należy włączyć GitHub Pages w Settings → Pages → Source: GitHub Actions** i poczekać na publikację.
+Mostek łączy się z kamerą LTE/solarną przez P4P, przechwytuje klatkę z H.264/H.265, zapisuje **JPEG w rzeczywiście otrzymanej rozdzielczości** i przygotowuje osobny obraz **320×240** dla dotykowego CYD. Zapisane zdjęcie można wyświetlić także w aplikacji Home Assistant na Androidzie. Nie jest to ciągły podgląd na żywo.
 
-[Szczegółowa instrukcja po polsku](docs/CYD_WEB_INSTALL.md).
+## Rozpocznij tutaj
 
-Home Assistant OS app (Raspberry Pi 4 ARM64 / amd64) for the LTE/solar
-UBox XEGA XG-01-EU4G and other UBox cameras. The **working** live
-snapshot path was validated on the XEGA by the camera owner on
-2026-10-19. The add-on starts a live UBox session via the
-[asyrk/ubox-web](https://github.com/asyrk/ubox-web) dynamic-relay transport,
-captures a HEVC/H.264 frame and stores a full-resolution JPEG from the actual P4P stream, plus a separate 240×320 JPEG for CYD.
+| Potrzebujesz… | Instrukcja |
+| --- | --- |
+| Instalacja / aktualizacja dodatku na Raspberry Pi z HA OS | [Instalacja Home Assistant](docs/INSTALL_HA.md) |
+| Obsługa panelu, wybór kadru, zdjęcia, PTZ i ustawień | [Instrukcja obsługi](docs/USER_GUIDE.md) |
+| Wgranie firmware i skonfigurowanie CYD | [Instalacja CYD przez USB](docs/CYD_WEB_INSTALL.md) |
+| Widżet ze zdjęciem i sterowanie na Androidzie | [Android / Generic Camera / PTZ](docs/ANDROID_WIDGET.md) |
+| Problemy z połączeniem, kadrem, dotykiem lub PTZ | [Rozwiązywanie problemów](docs/TROUBLESHOOTING.md) |
+| Tokeny, dostęp LAN, bateria i prywatność | [Bezpieczeństwo](docs/SECURITY.md) |
+| Zasada działania i API HTTP | [Dokumentacja techniczna](ubox_bridge/DOCS.md) |
+| Wykrywanie urządzeń przez konto UBox | [Logowanie UBox](docs/CLOUD_LOGIN.md) |
+| Historia wcześniejszych wersji | [Changelog](ubox_bridge/CHANGELOG.md) |
 
-## Install or upgrade
+## Wymagania
 
-Add this repository to the HAOS add-on store:
-`https://github.com/mpuchara/HA_UBOX_bridge`
+- Home Assistant OS na **aarch64** (np. Raspberry Pi 4) lub **amd64**; zainstalowany dodatek UBox Bridge.
+- Kamera obsługiwana przez UBox, np. **XEGA XG-01-EU4G**, z kontem UBox albo UID i hasłem urządzenia P2P. Obsługa innych modeli nie jest gwarantowana.
+- Dla CYD: **ESP32-2432S028 2,8″ z XPT2046** i sprawnym Wi-Fi 2,4 GHz; do wyboru warianty LCD **ST7789** i **ILI9341**.
+- Łączność sieciowa: dodatek HA → internet/P4P; CYD → Raspberry Pi na TCP **8100**; telefon → Home Assistant.
 
-Install/upgrade **UBox Bridge** to v0.5.12. Existing UBox login options and
-cached image are preserved. Change `interval_minutes` in the add-on
-configuration to **15** for a fresh snapshot every 15 minutes (or **0** to
-disable automatic capture); **existing installations keep the previous
-value, often 0, unless you explicitly change it**. Reload/restart the
-add-on after changing options. Use `capture_on_start: true` if you want
-an immediate new photo when the service boots.
+## Instalacja w skrócie
 
-The HA Ingress panel provides a manual capture button and a JPEG endpoint
-for a CYD TFT display (token-protected, port 8100). A CYD may request
-`GET /snapshot-cyd.jpg` every 30 seconds with `X-UBox-Token: TOKEN` and
-`If-None-Match: "etag-from-last-200"`. The server returns
-`200 image/jpeg` only when a new photo has been saved and
-`304 Not Modified` for unchanged photos. It never initiates P2P from
-these GET requests. To check freshness, `GET /snapshot-meta.json`
-with the same token.
+1. Dodaj repozytorium `https://github.com/mpuchara/HA_UBOX_bridge` w sklepie aplikacji/dodatków Home Assistant OS.
+2. Zainstaluj **UBox Bridge 0.5.12**, uzupełnij login UBox albo dane P2P, uruchom dodatek i otwórz panel **UBox Bridge**.
+3. Naciśnij **Nowe zdjęcie**. Zweryfikuj, że widoczny jest aktualny kadr oraz data ostatniego udanego pobrania.
+4. Wybierz z listy **Blur / Cover / Contain**. Zmiana przelicza lokalnie zachowany JPEG i **nie budzi kamery LTE**.
+5. Opcjonalnie wgraj CYD 0.2.6 przez [instalator w przeglądarce](https://mpuchara.github.io/HA_UBOX_bridge/) lub [instalator Windows ZIP](https://github.com/mpuchara/HA_UBOX_bridge/releases/tag/cyd-v0.2.6-fe27042c). Konfiguracja AP: **CYD / 12345678**; portal: `http://192.168.4.1`.
+6. Opcjonalnie zarejestruj [Generic Camera](docs/ANDROID_WIDGET.md) w HA i dodaj na Androidzie widżet **Picture**.
 
-## CYD firmware
+**Pobierz aktualny dodatek:** [UBox Bridge v0.5.12](https://github.com/mpuchara/HA_UBOX_bridge/releases/tag/v0.5.12) (wydanie eksperymentalne). Dla zwykłej instalacji HA OS zalecamy sklep dodatków; dostępne pliki ZIP służą także do instalacji ręcznej i archiwizacji.
 
-See [firmware/cyd_monitor](firmware/cyd_monitor/README.md) for a PlatformIO
-project for ESP32-2432S028 / 320×240 ILI9341 CYD.
-Build requires Wi-Fi credentials and the LAN token; they must not
-be committed to Git.
+## Bieżący sposób działania
 
-## Battery, privacy, and security
+```text
+Kamera XEGA/UBox (LTE, bateria słoneczna)
+  └─ P4P: krótka sesja wideo na żądanie / według harmonogramu
+     └─ UBox Bridge na Home Assistant OS
+        ├─ /data/last.jpg             — zachowana klatka w rozdzielczości źródła
+        ├─ /data/last_cyd_wide.jpg    — zdjęcie 320×240, bez obrotu kamery
+        ├─ panel HA Ingress          — obraz na górze, PTZ pod nim, lista kadrowania
+        └─ port 8100, LAN, token
+           ├─ ESP32 CYD              — ekran i gesty PTZ
+           └─ Generic Camera → HA → widżet Picture w Androidzie
+```
 
-At 15 minutes, a solar 4G camera is awakened 96 times per day. Start
-conservatively (e.g. 30–60 minutes), monitor battery and SIM data use,
-then shorten interval only if needed. Polling the cached JPEG from CYD
-does not use the camera's SIM allowance.
+**Fotografia a sterowanie:** CYD oraz widżet Androida czytają plik z pamięci HA. Samo odświeżenie tego pliku przez HTTP **nie** łączy się z LTE. Nowa transmisja pojawia się dopiero po ręcznym pobraniu, automatycznym harmonogramie lub po poleceniu ruchu PTZ.
 
-The Node P4P library is experimental and is pinned to a tested commit;
-its upstream author warns that it has not been comprehensively audited.
-Ingress UI is HA-authenticated; LAN port 8100 only serves token-guarded
-images and metadata, not remote camera-control commands. Do not forward
-port 8100 to the internet. If your JPEG token has appeared in a screenshot,
-use **Wygeneruj nowy token** in the Ingress panel to revoke it.
+**PTZ (eksperymentalnie):** krótkie polecenia lewo/prawo/góra/dół, zatrzymanie i próba pobrania nowego zdjęcia. Domyślny impuls **100 ms**, prędkość **1**, regulacja w ustawieniach dodatku. Fizyczne zachowanie zależy od firmware kamery.
 
-## CYD firmware v0.2.3 (portrait)
+## Ważne ograniczenia
 
-UBox Bridge v0.5.3 generates a new 240×320 `/snapshot-cyd.jpg` (rotated
-90° LEFT, cover-cropped, no letterbox). Original 320×240 `/snapshot.jpg`
-is preserved. The CYD draws the JPEG directly without block rotation.
-Setup hotspot: `CYD`; an 8-character random uppercase WPA2 password is
-shown on its LCD. Download and flash the 0.2.3 installer from GitHub Releases.
+- `video_quality: hd` **żąda** strumienia HD, ale nie gwarantuje jego rozdzielczości. Panel pokazuje rzeczywistą rozdzielczość zapisanej klatki.
+- Nie ma RTSP, nagrywania ciągłego ani potwierdzonego sterowania trybem IR/białych LED.
+- CYD używa w poziomie **320×240** i domyślnie ma złącza USB po prawej w dolnej części; krótkim BOOT można obrócić interfejs o 180°.
+- Hasło AP `12345678` jest świadomie proste i **słabe**. Używaj go wyłącznie w zaufanym otoczeniu do wstępnej konfiguracji.
+- Token z panelu daje dostęp **zarówno do zdjęć, jak i do PTZ**. Nie publikuj go, nie otwieraj portu 8100 na WAN i nie umieszczaj tokenu w repozytorium.
 
-## Native-resolution screenshots (v0.5.4)
+## Rozwój i źródła
 
-HA `/snapshot.jpg` now stores the selected frame at source resolution.
-CYD `/snapshot-cyd.jpg` is generated from that master with Lanczos
-resampling to 240×320, 90° left rotation and center crop for full screen.
-The panel shows *actual* P4P stream resolution (not claimed 3 MP sensor
-resolution). If low, compare `stream_index: 0` and optional `1` — not all
-cameras support both. Existing CYD firmware v0.2.3 works unchanged.
-
-## CYD landscape 0.2.4 (USB lower-right)
-
-Requires UBox Bridge 0.5.5+, then capture a fresh shot. Firmware now
-fetches `/snapshot-cyd-wide.jpg` (320×240) and sets the ILI9341 display
-rotation to 3. Mount horizontally with the USB connector at the lower-right.
-If text is inverted, tap BOOT once to toggle hardware rotations 3/1;
-rotation is saved in NVS. Hold BOOT 5 s to reset network settings.
-Setup SSID `CYD` and requested WPA2 password `12345678` (weak;
-keep provisioning short). SPI is 10 MHz for display troubleshooting.
-A 1.6 s color quadrant test on boot distinguishes LCD issues from camera JPEG.
-
-## Display controller and camera orientation (v0.5.6 / CYD v0.2.5)
-
-2-USB versions of ESP32-2432S028 sometimes use **ST7789**, not ILI9341.
-The web installer provides two explicitly labelled options.
-Use ST7789 for a two-USB board with leftover regions/stripes; choose ILI9341
-if its 320×240 test rectangle covers the entire LCD correctly.
-The UBox add-on rotates the **camera pixels** separately (default 90° left,
-configuration `camera_rotation: 90`) and sends a 320×240 full-screen JPEG.
-
-The installer now includes two LCD drivers because two-USB CYD batches
-can differ. Try ST7789 first, then ILI9341 if the color self-test leaves
-stale regions. The firmware checks that every JPEG pixel tile was written,
-so incomplete JPEGs are never recorded as a successful display update.
-
-## Fixed source angle and field of view (0.5.7)
-
-The 320x240 CYD endpoint now retains the original camera angle, regardless of
-the previous camera_rotation: 90 setting. CYD firmware 0.2.5 is unchanged.
-Add-on configuration cyd_fit_mode accepts blur (default: full image with
-soft-filled background), cover (full LCD with cropped sides) or contain
-(full image with black margins). For cover, cyd_focus_x (0..100, default 50)
-moves the crop. HA native JPEG remains unchanged.
-Restarting the add-on regenerates the CYD JPEG from the cached HA master,
-without any LTE wake-up or data usage.
-
-## Request native HD from UBox (0.5.8)
-
-UBox P4P differentiates \`streamIndex=0\` (SD) and \`streamIndex=1\` (HD)
-according to published reverse-engineered API documentation. The add-on
-previously used 0 and received 640x360. Now \`video_quality: hd\` is the
-default, even for existing saved options with \`stream_index: 0\`. Use
-\`video_quality: sd\` to return to SD, or \`manual\` to use the legacy
-\`stream_index\` selector. The real resolution appears in the Ingress
-panel after a successful photo; HD is **requested, not guaranteed**.
-Failure retains the old cached still and does not automatically retry SD.
-No firmware change to CYD or new JPEG URL is needed.
-
-## PTZ gestures (bridge v0.5.10 + CYD v0.2.6)
-
-Experimental swipe-to-move support: a CYD gesture sends a token-authenticated
-LAN POST /ptz to bridge with fixed direction only. The bridge opens a P4P
-session, sends a short movement + STOP, then captures a **fresh** screenshot
-using a second session. Ingress provides arrow buttons for diagnostics. This
-is not continuous video and is not hardware-confirmed on this XEGA firmware.
-Only the already-authorized camera can be moved; avoid public exposure of
-port 8100. Old CYD firmware remains able to display stills.
-
-## Swipe/PTZ v0.5.10 (CYD v0.2.6)
-
-Swipe left/right/up/down on CYD to issue one authenticated POST /ptz to
-UBox Bridge, with fixed direction. P4P uses short 420ms movement + STOP,
-followed by a separate video session to capture a **post-motion** JPEG.
-The LCD checks for a new ETag every 2.5 seconds after a swipe (max 110s).
-The 3-point XPT2046 calibration runs on first boot and is saved in NVS;
-hold BOOT 2–4s to recalibrate later. Use the same LCD driver variant that
-already displayed the camera correctly. **Upgrade bridge first** to 0.5.10.
-PTZ may not work on all XEGA firmware; requires live device verification.
-Snapshot token now authorizes PTZ movement too — protect it and keep
-port 8100 on LAN only.
-
-## PTZ corrected small-step motion (0.5.11)
-
-Set `ptz_pulse_ms: 100` (range 60–350) and `ptz_speed: 1` (range 1–8)
-in addon options. This fixes a reverse-engineered IOCTRL PTZ field-layout
-regression: speed at byte 2, direction at byte 5 and all-zero STOP.
-Prior implementation used an incorrect third-party format; this could
-cause both left/right swipes to move only left and oversized movements.
-Firmware **CYD 0.2.6 stays unchanged**; upgrade addon only.
-
-## Mobile-first panel, fitting selector, Android Picture widget (v0.5.12)
-
-The add-on panel now opens with a single CYD 320×240 snapshot on top,
-PTZ controls below, and a native dropdown for Blur / Cover / Contain.
-For Cover, use the horizontal crop-position slider. Choices are persisted
-under /data/framing.json and immediately regenerate the cached CYD JPEG
-without any camera LTE wakeup. The addon config mode is also a dropdown.
-
-For **Android Home Assistant Picture widgets**, add the bridge URL to a
-**Generic Camera** integration (HA acts as authenticated image proxy) and
-select its camera entity in the official HA Android Picture widget.
-Control arrows are not embedded in the widget; for remote control use a
-phone dashboard or four Action button widgets with the ready-made example
-files at [docs/ANDROID_WIDGET.md](docs/ANDROID_WIDGET.md).
+Backend bazuje na przypiętej wersji [asyrk/ubox-web](https://github.com/asyrk/ubox-web), korzysta z FFmpeg/FFprobe i jest w fazie testów. Dodatkowe informacje o protokole oraz strukturze projektu są w [DOCS](ubox_bridge/DOCS.md). Wydanie firmware i dokumentacja są dostępne w tym repozytorium; pliki użytkowników, tokeny i hasła nie są przechowywane w Git.
