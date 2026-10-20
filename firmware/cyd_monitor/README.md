@@ -16,7 +16,7 @@
 
 Otwórz **https://mpuchara.github.io/HA_UBOX_bridge/** w Chrome/Edge na komputerze z podłączonym ESP32. Wybierz ST7789 albo ILI9341 i poprawny port COM.
 
-Jeśli strona jest niedostępna lub potrzebujesz instalatora lokalnego, pobierz [CYD 0.2.6 — Windows ZIP](https://github.com/mpuchara/HA_UBOX_bridge/releases/tag/cyd-v0.2.6-fe27042c), wypakuj i uruchom `Start-Installer.cmd`. Instrukcja: [CYD_WEB_INSTALL.md](../../docs/CYD_WEB_INSTALL.md).
+Jeśli strona jest niedostępna lub potrzebujesz instalatora lokalnego, pobierz [CYD 0.2.7 — Windows ZIP](https://github.com/mpuchara/HA_UBOX_bridge/releases/tag/cyd-v0.2.7-ab3800d8), wypakuj i uruchom `Start-Installer.cmd`. Instrukcja: [CYD_WEB_INSTALL.md](../../docs/CYD_WEB_INSTALL.md).
 
 Po pierwszym uruchomieniu sprawdź **cztery pola kolorów**. Jeżeli obraz jest wadliwy, zmień wariant sterownika, zanim zaczniesz diagnozować kamerkę.
 

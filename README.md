@@ -29,10 +29,10 @@ Mostek łączy się z kamerą LTE/solarną przez P4P, przechwytuje klatkę z H.2
 ## Instalacja w skrócie
 
 1. Dodaj repozytorium `https://github.com/mpuchara/HA_UBOX_bridge` w sklepie aplikacji/dodatków Home Assistant OS.
-2. Zainstaluj **UBox Bridge 0.5.12**, uzupełnij login UBox albo dane P2P, uruchom dodatek i otwórz panel **UBox Bridge**.
+2. Zainstaluj **UBox Bridge 0.5.13**, uzupełnij login UBox albo dane P2P, uruchom dodatek i otwórz panel **UBox Bridge**.
 3. Naciśnij **Nowe zdjęcie**. Zweryfikuj, że widoczny jest aktualny kadr oraz data ostatniego udanego pobrania.
 4. Wybierz z listy **Blur / Cover / Contain**. Zmiana przelicza lokalnie zachowany JPEG i **nie budzi kamery LTE**.
-5. Opcjonalnie wgraj CYD 0.2.6 przez [instalator w przeglądarce](https://mpuchara.github.io/HA_UBOX_bridge/) lub [instalator Windows ZIP](https://github.com/mpuchara/HA_UBOX_bridge/releases/tag/cyd-v0.2.6-fe27042c). Konfiguracja AP: **CYD / 12345678**; portal: `http://192.168.4.1`.
+5. Opcjonalnie wgraj CYD 0.2.7 przez [instalator w przeglądarce](https://mpuchara.github.io/HA_UBOX_bridge/) lub [instalator Windows ZIP](https://github.com/mpuchara/HA_UBOX_bridge/releases). Konfiguracja AP: **CYD / 12345678**; portal: `http://192.168.4.1`.
 6. Opcjonalnie zarejestruj [Generic Camera](docs/ANDROID_WIDGET.md) w HA i dodaj na Androidzie widżet **Picture**.
 
 **Pobierz aktualny dodatek:** [UBox Bridge v0.5.13](https://github.com/mpuchara/HA_UBOX_bridge/releases/tag/v0.5.13) (wydanie eksperymentalne). Dla zwykłej instalacji HA OS zalecamy sklep dodatków; dostępne pliki ZIP służą także do instalacji ręcznej i archiwizacji.

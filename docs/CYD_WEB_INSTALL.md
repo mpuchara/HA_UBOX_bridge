@@ -17,7 +17,7 @@ Model i rozstaw pinów są ważniejsze niż sam wygląd płytki. **Nie flashuj**
 
 ## 2. Co przygotować przed wgraniem
 
-- Home Assistant OS z działającym **UBox Bridge 0.5.12**.
+- Home Assistant OS z działającym **UBox Bridge 0.5.13**.
 - W panelu dodatku **Zaawansowane** odczytaj token UBox Bridge. Nie kopiuj go do publicznych zgłoszeń ani na zrzuty ekranu.
 - Znaj adres IP **Raspberry Pi / hosta HA** w LAN, np. `192.168.1.40` (bez `http://` i bez `:8123`).
 - Dostęp do domowego Wi-Fi **2,4 GHz**, z którego CYD osiągnie port TCP **8100** Raspberry Pi.
@@ -40,7 +40,7 @@ Jeśli GitHub Pages nie jest aktywne: repozytorium → **Settings → Pages → 
 
 ## 4. Alternatywa: instalator Windows ZIP (bez PlatformIO)
 
-[Pobierz wersję CYD 0.2.6 dla Windows](https://github.com/mpuchara/HA_UBOX_bridge/releases/tag/cyd-v0.2.6-fe27042c) → `UBox-CYD-Windows-Browser-Installer.zip`.
+[Pobierz CYD 0.2.7 dla Windows](https://github.com/mpuchara/HA_UBOX_bridge/releases/tag/cyd-v0.2.7-ab3800d8) → `UBox-CYD-Windows-Browser-Installer.zip`.
 
 1. **Wypakuj** całe archiwum do folderu, nie uruchamiaj skryptu z podglądu ZIP.
 2. Uruchom `Start-Installer.cmd`. Otworzy się lokalny serwer HTTP na `127.0.0.1` i przeglądarka.

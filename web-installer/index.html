@@ -23,7 +23,7 @@
 <main>
   <div class="tag">Home Assistant · XEGA 4G · ESP32-2432S028</div>
   <h1>UBox CYD — instalator</h1>
-  <p class="subtitle">Firmware <strong>0.2.6</strong> · zgodny z UBox Bridge <strong>0.5.12</strong> · ekran 320×240 i dotykowe gesty PTZ. Nie potrzebujesz VS Code ani PlatformIO.</p>
+  <p class="subtitle">Firmware <strong>0.2.7</strong> · zgodny z UBox Bridge <strong>0.5.13</strong> · ekran 320×240, gesty PTZ i automatyczna jasność po kalibracji. Nie potrzebujesz VS Code ani PlatformIO.</p>
   <p><a href="https://github.com/mpuchara/HA_UBOX_bridge/blob/main/docs/CYD_WEB_INSTALL.md">Pełna instrukcja instalacji CYD</a> · <a href="https://github.com/mpuchara/HA_UBOX_bridge/blob/main/docs/TROUBLESHOOTING.md">Rozwiązywanie problemów</a></p>
   <section class="panel">
     <h2>1. Wybierz właściwy sterownik ekranu</h2>
@@ -59,10 +59,11 @@
     <p class="muted">Ustawienia Wi-Fi, HA i token zapisywane są lokalnie w pamięci ESP32. Nie są przesyłane do tej witryny. Hasło AP 12345678 jest łatwe do odgadnięcia — konfiguruj wyłącznie w zaufanym miejscu.</p>
   </section>
   <section class="panel">
-    <h2>3. Zdjęcie i sterowanie dotykiem</h2>
+    <h2>3. Zdjęcie, dotyk i jasność</h2>
     <p>Bridge pokazuje w HA jedno zdjęcie na górze, pod nim strzałki PTZ i rozwijaną listę kadrowania <b>Blur / Cover / Contain</b>. Wybór kadrowania przelicza zdjęcie zapisane w HA, nie budzi LTE.</p>
     <p>CYD pobiera <code>/snapshot-cyd-wide.jpg</code> w poziomie 320×240 i sprawdza go co 30 sekund (ETag/HTTP 304). Przeciągnięcie palcem w lewo/prawo/górę/dół wysyła jeden krótki ruch PTZ, STOP i żądanie nowego zdjęcia. Przy słabym LTE odświeżenie może potrwać.</p>
     <p>Gdy ruchy są zbyt duże, w konfiguracji dodatku HA zmniejsz <code>ptz_pulse_ms</code> z 100 do 60 (prędkość <code>ptz_speed: 1</code>). Nie próbuj wykonywać wielu ruchów naraz.</p>
+    <p>Po montażu w obudowie otwórz w panelu UBox Bridge sekcję <b>Automatyczna jasność CYD</b>. Zapisz rzeczywisty pomiar i komfortowy poziom PWM osobno dla <b>Nocy</b> i <b>Dnia</b>. Czujnik GPIO34 i PWM GPIO21 automatycznie dopasują jasność pomiędzy punktami. <a href="https://github.com/mpuchara/HA_UBOX_bridge/blob/main/docs/BRIGHTNESS_CALIBRATION.md">Instrukcja kalibracji LDR</a>.</p>
     <p>CYD musi mieć dostęp do Raspberry Pi na <b>TCP 8100 w zaufanym LAN</b>. Nie przekierowuj tego portu na internet.</p>
   </section>
   <section class="panel warn">

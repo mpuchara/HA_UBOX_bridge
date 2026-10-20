@@ -77,15 +77,15 @@ W konfiguracji graficznej dodatku ustaw:
 4. Po aktualizacji **uruchom ponownie dodatek**, otwórz panel i sprawdź obraz oraz stan PTZ.
 5. Ustawienia w `/data` (w tym token, ostatnie zdjęcia i wybór kadrowania) powinny być zachowane przy standardowej aktualizacji.
 
-**Kompatybilność:** Bridge 0.5.12 obsługuje **CYD 0.2.6**. Zmiany tylko w panelu HA nie wymagają ponownego wgrywania firmware na ESP32.
+**Kompatybilność:** Bridge 0.5.13 obsługuje **CYD 0.2.7** z regulacją jasności, a także starsze firmware. Zmiany tylko w panelu HA nie wymagają ponownego wgrywania firmware na ESP32.
 
 ## 7. Instalacja ręczna z pliku ZIP (zaawansowana)
 
-[Wydanie UBox Bridge 0.5.12](https://github.com/mpuchara/HA_UBOX_bridge/releases/tag/v0.5.12) zawiera:
+[Wydanie UBox Bridge 0.5.13](https://github.com/mpuchara/HA_UBOX_bridge/releases/tag/v0.5.13) zawiera:
 
-- `HA-UBOX-Bridge-0.5.12-addon-root.zip` — pliki **wewnętrzne katalogu dodatku** (na poziomie głównym ma być `config.yaml`).
-- `HA-UBOX-Bridge-0.5.12-repository.zip` — kompletna struktura repozytorium (katalog `ubox_bridge/`, `repository.yaml`, firmware, docs).
-- `HA-UBOX-Bridge-0.5.12-complete.zip` — archiwum zbiorcze: dwie powyższe paczki i sumy SHA-256.
+- `HA-UBOX-Bridge-0.5.13-addon-root.zip` — pliki **wewnętrzne katalogu dodatku** (na poziomie głównym ma być `config.yaml`).
+- `HA-UBOX-Bridge-0.5.13-repository.zip` — kompletna struktura repozytorium (katalog `ubox_bridge/`, `repository.yaml`, firmware, docs).
+- `HA-UBOX-Bridge-0.5.13-complete.zip` — archiwum zbiorcze: dwie powyższe paczki i sumy SHA-256.
 - `SHA256SUMS.txt` — sumy kontrolne archiwów root i repository.
 
 W HA OS do instalacji lokalnej wymagany jest dostęp do katalogu dodatków/konfiguracji (np. SSH lub Samba). Nie wrzucaj archiwum „complete” bezpośrednio jako dodatku. Przy ręcznej instalacji rozpakuj pliki `addon-root` do katalogu dodatku, tak aby **`config.yaml` leżał bezpośrednio w katalogu dodatku**, a następnie odśwież listę lokalnych dodatków w HA. Jeżeli nie masz takiego dostępu, skorzystaj z instalacji przez repozytorium (pkt 2).

@@ -6,7 +6,7 @@ Bez Pythona, PlatformIO ani praw administratora. Wymaga Chrome/Edge, Web Serial,
 
 ## Instalacja
 
-1. Pobierz [UBox CYD 0.2.6 — Release](https://github.com/mpuchara/HA_UBOX_bridge/releases/tag/cyd-v0.2.6-fe27042c), plik `UBox-CYD-Windows-Browser-Installer.zip`.
+1. Pobierz [UBox CYD 0.2.7 — Release](https://github.com/mpuchara/HA_UBOX_bridge/releases/tag/cyd-v0.2.7-ab3800d8), plik `UBox-CYD-Windows-Browser-Installer.zip`.
 2. **Wypakuj wszystko** do folderu (nie uruchamiaj z podglądu ZIP).
 3. Podłącz CYD przez USB do Windows.
 4. Uruchom `Start-Installer.cmd`. Skrypt `Install-CYD.ps1` uruchamia stronę lokalną pod `http://127.0.0.1:8765` (lub 8766–8770, jeśli port jest zajęty) i otwiera Edge.
@@ -14,7 +14,7 @@ Bez Pythona, PlatformIO ani praw administratora. Wymaga Chrome/Edge, Web Serial,
 6. Nie zamykaj okna konsoli do ukończenia wgrywania. Flashowanie może usunąć poprzednią konfigurację ESP32.
 7. Po restarcie sprawdź test kolorów i połącz się z siecią **CYD / 12345678**. Portal Wi-Fi: **http://192.168.4.1**.
 
-Wpisz domowe Wi-Fi **2,4 GHz**, adres IP hosta Home Assistant (bez `http://` i `:8123`) oraz **sam token** z panelu UBox Bridge. Firmware 0.2.6 wymaga Bridge **0.5.10+** dla PTZ (zalecany **0.5.12**).
+Wpisz domowe Wi-Fi **2,4 GHz**, adres IP hosta Home Assistant (bez `http://` i `:8123`) oraz **sam token** z panelu UBox Bridge. Firmware 0.2.7 wymaga Bridge **0.5.13** dla automatycznej jasności; gesty PTZ działają z Bridge 0.5.10+.
 
 ## Po instalacji
 
