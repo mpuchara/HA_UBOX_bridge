@@ -1,5 +1,7 @@
 # Changelog
 
+> **Archiwum historyczne:** poniższe wpisy opisują zachowanie swoich wersji, także dawno zastąpione rozwiązania. Aktualne instrukcje instalacji, PTZ, kadrowania i Androida są w [README](../README.md) i katalogu [docs](../docs/). Zmiany dokumentacji na gałęzi `main` nie zmieniają funkcjonalnej wersji 0.5.12.
+
 ## 0.5.12 — mobile-first camera panel, visual framing and Android widgets
 
 - Dashboard opens with one large **CYD 320×240 photo**; duplicate HA-native and older portrait previews removed from the page (endpoints retained).

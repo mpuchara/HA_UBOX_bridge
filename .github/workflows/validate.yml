@@ -14,6 +14,7 @@ jobs:
           python-version: '3.13'
       - run: python -m pip install --upgrade pyyaml
       - run: python -m compileall -q ubox_bridge tests scripts
+      - run: python scripts/check_docs.py
       - name: Check CYD project files and configuration placeholders
         run: |
           test -f firmware/cyd_monitor/platformio.ini
