@@ -502,7 +502,7 @@ void updateBrightness(){
   const float delta=constrain(desired-currentBrightness,-0.6f,0.6f);
   currentBrightness=constrain(currentBrightness+delta,5.0f,100.0f);
   const int duty=constrain(int(roundf(currentBrightness*255.0f/100.0f)),13,255);
-  ledcWrite(BACKLIGHT_PWM_CHANNEL,duty);
+  ledcWrite(TFT_BACKLIGHT_PIN,duty);
 }
 void getBrightnessConfig(){
   if(WiFi.status()!=WL_CONNECTED||haHost.isEmpty()||snapshotToken.isEmpty())return;
@@ -570,9 +570,9 @@ void postBrightnessTelemetry(){
 void setup() {
   Serial.begin(115200);
   pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
-  ledcSetup(BACKLIGHT_PWM_CHANNEL,5000,8);
-  ledcAttachPin(TFT_BACKLIGHT_PIN,BACKLIGHT_PWM_CHANNEL);
-  ledcWrite(BACKLIGHT_PWM_CHANNEL,255);
+  // Arduino-ESP32 3.x LEDC API selects a channel automatically by pin.
+  ledcAttach(TFT_BACKLIGHT_PIN,5000,8);
+  ledcWrite(TFT_BACKLIGHT_PIN,255);
   pinMode(LDR_ADC_PIN,INPUT);
   analogReadResolution(12);
   analogSetPinAttenuation(LDR_ADC_PIN,ADC_11db);
