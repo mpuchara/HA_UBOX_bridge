@@ -741,100 +741,206 @@ class ApiHandler(BaseHTTPRequestHandler):
         self.json_response(202 if accepted else 409, {"accepted": accepted, "message": message})
 
 
-PAGE = '''<!doctype html><html lang="pl"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>UBox Bridge</title>
+PAGE = '''<!doctype html>
+<html lang="pl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UBox · Rożnów</title>
 <style>
-body{font:16px system-ui;background:#121825;color:#f3f4f6;max-width:760px;margin:1rem auto;padding:1rem}
-h1{font-size:1.8rem}h3{margin-top:0}.card{background:#202a3c;padding:1.2rem;margin:1rem 0;border-radius:12px}
-button{background:#5bbcff;color:#092034;border:0;border-radius:8px;padding:.8rem;margin:.15rem;font-weight:700;cursor:pointer}
-button:disabled{opacity:.45}img{display:block;width:100%;max-width:560px;aspect-ratio:4/3;object-fit:contain;background:black;border-radius:8px}
-#cydimage{max-width:240px;aspect-ratio:3/4}
-code,pre{overflow-wrap:anywhere;white-space:pre-wrap;color:#a6eeac}
-.err{color:#ffaaaa}.muted{color:#b5c0cf}small{line-height:1.6}
-</style></head><body>
-<h1>📷 UBox Bridge</h1><p>XEGA 4G → zdjęcie na żywo → JPEG natywny → HA · JPEG 320×240 → CYD</p>
-<div class="card"><h3>Automatyczne zdjęcia</h3>
-<p id="status">Wczytywanie…</p><p id="err" class="err"></p>
-<p><b id="interval"></b></p>
-<button id="capture">Zrób nowe zdjęcie teraz</button>
-<button id="discover">Wykryj kamerę</button>
-<p class="muted">Sterowanie PTZ (eksperymentalne): krótki impuls, STOP i nowe zdjęcie.</p>
-<p id="ptzsettings" class="muted">Impuls: 100 ms, prędkość: 1</p>
-<div><button class="ptz" data-dir="left">←</button><button class="ptz" data-dir="up">↑</button><button class="ptz" data-dir="down">↓</button><button class="ptz" data-dir="right">→</button></div>
-<p id="ptzstatus" class="muted" aria-live="polite"></p>
-<p id="devices" class="muted"></p>
-<p><small>Odstęp między zdjęciami zmienisz w <b>Konfiguracji dodatku</b>, pole
-<code>interval_minutes</code>. Przy wartości 0 automatyczne zdjęcia są wyłączone.
-CYD jedynie sprawdza zapisany JPEG — nie wybudza kamery.</small></p>
-<details><summary>Diagnostyka transmisji</summary>
-<pre id="diag"></pre></details></div>
-<div class="card"><h3>Ostatnia klatka HA (rozdzielczość źródłowa)</h3>
-<p id="resolution" class="muted">Odczyt rozdzielczości po nowej klatce.</p>
-<p id="quality" class="muted">Żądany profil UBox: HD (1).</p>
-<img id="image" alt="Ostatnia klatka">
-<p id="stamp" class="muted">Brak obrazu</p></div>
-<div class="card"><h3>Podgląd CYD (320×240 — USB po prawej)</h3>
-<img id="wideimage" alt="Zdjęcie CYD, bez obrotu kadru kamery">
-<p id="framing" class="muted">Kadr źródłowy bez dodatkowego obrotu.</p>
-<p class="muted">Sposób dopasowania możesz zmienić w konfiguracji dodatku:
-<code>cyd_fit_mode: blur</code> zachowuje cały kadr z rozmytymi pasami,
-<code>cover</code> wypełnia ekran kosztem przycięcia boków,
-<code>contain</code> zachowuje cały kadr z czarnymi pasami.
-Przy <code>cover</code> ustaw <code>cyd_focus_x</code> od 0 (lewa)
-do 100 (prawa). Zmiana nie wymaga nowego pobierania z LTE.</p></div>
-<div class="card"><h3>Starszy podgląd CYD (240×320)</h3>
-<img id="cydimage" alt="Starsza wersja pionowa"></div>
-<div class="card"><h3>CYD / sieć lokalna</h3>
-<p>CYD pobiera zdjęcie np. co 30 sekund, lecz transferuje JPEG tylko wtedy,
-gdy powstała nowa klatka (nagłówek ETag / HTTP 304).</p>
-<code id="url"></code>
-<p><small>Zamień IP_HA na adres Raspberry Pi. Endpoint przyjmuje też
-nagłówek <code>X-UBox-Token</code> zamiast parametru w adresie.
-Nie udostępniaj tokenu poza domową siecią.</small></p>
-<button id="rotate">Wygeneruj nowy token</button></div>
-<script>
-let last='',lastWide='',busy=false;
-async function refresh(){
-try{
- const response=await fetch('status',{cache:'no-store'});
- if(!response.ok)throw new Error('status HTTP '+response.status);
- const s=await response.json();
- document.getElementById('status').textContent=
- !s.configured?'Skonfiguruj konto UBox.':s.capturing?'Trwa pobieranie nowego zdjęcia…':
- s.has_image?'Ostatnia klatka dostępna.':'Brak obrazu; naciśnij przycisk zdjęcia.';
- document.getElementById('err').textContent=s.last_error||s.discovery_error||'';
- document.getElementById('interval').textContent=s.interval_minutes>0?
- 'Nowe zdjęcie co '+s.interval_minutes+' min (Home Assistant)':
- 'Automatyczne zdjęcia: wyłączone (interval_minutes=0)';
- document.getElementById('capture').disabled=!s.configured||s.capturing;
- document.getElementById('discover').disabled=!s.account_configured||s.detecting;
- document.querySelectorAll(".ptz").forEach(b=>b.disabled=!s.configured||s.capturing);
- document.getElementById("ptzstatus").textContent=s.ptz_running?"Kamera wykonuje ruch…":(s.last_ptz_error||"Dotknij kierunku, aby przesunąć i odświeżyć kadr.");
- document.getElementById("ptzsettings").textContent="Impuls: "+s.ptz_pulse_ms+" ms; prędkość: "+s.ptz_speed+" (zmień w konfiguracji dodatku)";
- document.getElementById('devices').textContent=s.devices.map(d=>d.name+
- ' (…'+d.uid_suffix+')'+(d.has_device_password?' — dostępna':' — brak hasła P2P')).join(' | ');
- document.getElementById('stamp').textContent=s.last_success||'Brak zdjęcia';
- document.getElementById('resolution').textContent='Rzeczywisty zapisany obraz: '+(s.source_resolution||'brak danych — pobierz nowe zdjęcie');
- document.getElementById('quality').textContent='Żądany profil: '+s.video_quality.toUpperCase()+
- ' (streamIndex '+s.requested_stream_index+')'+
- (s.last_stream_index!==null?' · ostatni udany odbiór z indeksu '+s.last_stream_index:' · niepotwierdzony na kamerze');
- document.getElementById('diag').textContent=JSON.stringify(s.live_diagnostics||{},null,2);
- document.getElementById('framing').textContent='Kadr: '+s.cyd_fit_mode+
-    (s.cyd_fit_mode==='cover'?' · środek przycięcia '+s.cyd_focus_x+'%':'')+
-    ' · bez obrotu zdjęcia';
- document.getElementById('url').textContent='http://IP_HA:8100/snapshot-cyd-wide.jpg?token='+encodeURIComponent(s.snapshot_token);
- if(s.has_image&&last!==s.last_success){last=s.last_success;document.getElementById('image').src='snapshot.jpg?t='+Date.now();if(s.has_cyd_image)document.getElementById('cydimage').src='snapshot-cyd.jpg?t='+Date.now()}
- if(s.has_cyd_wide_image&&lastWide!==s.cyd_wide_revision){lastWide=s.cyd_wide_revision;document.getElementById('wideimage').src='snapshot-cyd-wide.jpg?t='+Date.now()}
-}catch(e){document.getElementById('status').textContent='Nie można odczytać stanu dodatku.'}
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0 auto;padding:8px 10px 28px;max-width:760px;background:#111923;
+color:#f1f5f9;font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{display:grid;gap:12px}
+article{background:#1e293b;border:1px solid #344256;border-radius:14px;padding:12px}
+#viewer{padding:5px;overflow:hidden}
+#camera{display:block;width:100%;aspect-ratio:4/3;object-fit:contain;
+background:#000;border-radius:11px}
+#empty{padding:22px;color:#cbd5e1;text-align:center}
+.header{display:flex;align-items:center;justify-content:space-between;gap:12px;
+margin:9px 2px 2px;flex-wrap:wrap}
+h1{font-size:1.25rem;margin:0}h2{font-size:1.05rem;margin:0 0 10px}
+.muted{color:#b9c7d9;font-size:.92rem}.error{color:#ffb3ad}
+button,select,input{font:inherit}
+button,select{border:1px solid #60738a;border-radius:10px;min-height:45px}
+button{background:#375a79;color:white;font-weight:650;padding:8px 13px;cursor:pointer}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #62c9ff}
+button:disabled,select:disabled{opacity:.45;cursor:wait}
+.primary{background:#187db3;border-color:#1c9ddf}
+.ptz-pad{display:grid;grid-template-columns:repeat(3,64px);justify-content:center;
+gap:8px;margin:12px auto}
+.ptz{font-size:27px;width:64px;height:58px;padding:0;touch-action:manipulation}
+.ptz.up{grid-column:2;grid-row:1}
+.ptz.left{grid-column:1;grid-row:2}
+.ptz.down{grid-column:2;grid-row:2}
+.ptz.right{grid-column:3;grid-row:2}
+.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+label{display:block;font-weight:650;margin:3px 0 6px}
+select{width:100%;background:#101d2d;color:white;padding:8px}
+#focusrow{margin-top:12px}
+#focus{width:100%;accent-color:#47b8ea}
+a{color:#76d3ff}
+code,pre{color:#b9f2b2;overflow-wrap:anywhere;white-space:pre-wrap}
+details{margin-top:8px}
+summary{cursor:pointer;padding:6px 0;font-weight:600}
+pre{max-height:260px;overflow:auto;font-size:12px}
+#status{margin:3px 0}small{line-height:1.6}
+@media(min-width:520px){body{padding:14px 22px 36px}.ptz-pad{grid-template-columns:repeat(3,72px)}.ptz{width:72px;height:62px}}
+</style></head><body><main>
+<article id="viewer">
+  <img id="camera" alt="Ostatni obraz z kamery UBox" hidden>
+  <p id="empty">Pobieranie ostatniego zdjęcia…</p>
+  <div class="header"><h1>📷 Rożnów · UBox</h1>
+  <span class="muted" id="stamp">Brak zdjęcia</span></div>
+  <p class="muted" id="status">Ładowanie statusu…</p>
+</article>
+<article>
+  <h2>Sterowanie kamerą</h2>
+  <p class="muted">Jeden krótki ruch, STOP, a następnie automatyczne odświeżenie zdjęcia.</p>
+  <div class="ptz-pad" aria-label="Kierunki ruchu kamery">
+    <button class="ptz up" data-dir="up" aria-label="Kamera do góry">↑</button>
+    <button class="ptz left" data-dir="left" aria-label="Kamera w lewo">←</button>
+    <button class="ptz down" data-dir="down" aria-label="Kamera w dół">↓</button>
+    <button class="ptz right" data-dir="right" aria-label="Kamera w prawo">→</button>
+  </div>
+  <p id="ptzstatus" class="muted" role="status"></p>
+  <div class="actions"><button id="capture" class="primary">↻ Nowe zdjęcie</button>
+    <span id="captureInfo" class="muted"></span></div>
+</article>
+<article>
+  <h2>Dopasowanie kadru do CYD</h2>
+  <label for="fit">Tryb wyświetlania</label>
+  <select id="fit" aria-label="Tryb kadrowania">
+    <option value="blur">Blur — cały kadr, rozmyte tło</option>
+    <option value="cover">Cover — pełny ekran, przycięte boki</option>
+    <option value="contain">Contain — cały kadr, czarne pasy</option>
+  </select>
+  <div id="focusrow" hidden>
+    <label for="focus">Pozycja kadru w poziomie: <output id="focusval">50%</output></label>
+    <input id="focus" type="range" min="0" max="100" step="5" value="50">
+    <p class="muted">0% — lewa strona, 50% — środek, 100% — prawa strona.</p>
+  </div>
+  <p class="muted" id="fitstatus" role="status">Zmiana kadru nie budzi kamery LTE.</p>
+</article>
+<article>
+  <details id="androidHelp"><summary>📱 Widżet na telefonie z Home Assistant</summary>
+    <p>W Home Assistant dodaj integrację <b>Generic Camera</b>. Jako
+    <b>Still Image URL</b> ustaw poniższy adres (wstaw lokalny IP Raspberry Pi).
+    Nazwij kamerę np. <b>UBox Rożnów</b>.</p>
+    <p><code id="widgeturl"></code></p>
+    <p>Na Androidzie dodaj widżet <b>Home Assistant → Picture (Camera)</b>,
+    wybierz nową encję kamery i akcję dotknięcia <b>Open</b> lub <b>Refresh</b>.
+    Widżet pokazuje zapisany obraz, nie strumień live ani strzałki PTZ.
+    Pełne sterowanie działa tutaj oraz może działać na osobnym dashboardzie HA.
+    </p>
+    <p><a href="https://github.com/mpuchara/HA_UBOX_bridge/blob/main/docs/ANDROID_WIDGET.md"
+       target="_blank" rel="noopener noreferrer">Instrukcja widżetu, przycisków ruchu i dashboardu telefonu</a></p>
+  </details>
+  <details><summary>Zaawansowane · konfiguracja i diagnostyka</summary>
+    <p class="muted" id="quality"></p><p class="muted" id="devices"></p>
+    <p class="error" id="error"></p>
+    <p>Automatyczne zdjęcia: <span id="interval"></span>. Zmień
+    <code>interval_minutes</code> w konfiguracji dodatku.</p>
+    <button id="discover">Wykryj kamerę</button>
+    <p class="muted" id="ptzsettings"></p>
+    <p class="muted">Adres JPEG dla CYD (tylko zaufany LAN):</p>
+    <p><code id="url"></code></p>
+    <button id="rotate">Wygeneruj nowy token</button>
+    <pre id="diag"></pre>
+  </details>
+</article>
+</main><script>
+let lastWide='',working=false,editing=false;
+const byId=id=>document.getElementById(id);
+function applyMode(){
+  byId('focusrow').hidden=byId('fit').value!=='cover';
+  byId('focusval').textContent=byId('focus').value+'%';
 }
-async function action(route){const r=await fetch(route,{method:'POST'});if(!r.ok)alert('Akcja nie została wykonana (HTTP '+r.status+')');refresh()}
-document.getElementById('capture').onclick=()=>action('capture');
-document.getElementById('discover').onclick=()=>action('discover');
-document.querySelectorAll(".ptz").forEach(b=>b.onclick=async()=>{
- const r=await fetch('ptz',{method:'POST',headers:{"Content-Type":"application/json"},body:JSON.stringify({direction:b.dataset.dir})});
- if(!r.ok)alert("PTZ: "+r.status); refresh();
-});
-document.getElementById('rotate').onclick=()=>{if(confirm('Stary adres CYD przestanie działać. Zmienić token?'))action('rotate-token')};
+async function refresh(){
+  try{
+    const response=await fetch('status',{cache:'no-store'});
+    if(!response.ok)throw Error('HTTP '+response.status);
+    const s=await response.json();
+    byId('status').textContent=!s.configured?'Skonfiguruj kamerę UBox.':
+      s.ptz_running?'Kamera wykonuje ruch…':s.capturing?
+      'Pobieranie lub przetwarzanie nowego zdjęcia…':
+      s.has_cyd_wide_image?'Ostatni zapisany obraz (nie live).':'Brak zdjęcia — pobierz pierwszą klatkę.';
+    byId('stamp').textContent=s.last_success?
+      new Date(s.last_success).toLocaleString('pl-PL'):'Brak zdjęcia';
+    byId('capture').disabled=!s.configured||s.capturing||working;
+    byId('discover').disabled=!s.account_configured||s.detecting||working;
+    document.querySelectorAll('.ptz').forEach(x=>x.disabled=!s.configured||s.capturing||working);
+    byId('fit').disabled=s.capturing||working;
+    byId('focus').disabled=s.capturing||working;
+    byId('ptzstatus').textContent=s.ptz_running?'Ruch + oczekiwanie na nowy obraz':
+      (s.last_ptz_error||'Kierunki: ↑ ↓ ← →');
+    byId('ptzsettings').textContent='Impuls PTZ: '+s.ptz_pulse_ms+' ms, prędkość '+s.ptz_speed;
+    byId('captureInfo').textContent=s.source_resolution?
+      'Źródło: '+s.source_resolution:'';
+    byId('error').textContent=s.last_error||s.discovery_error||'';
+    byId('interval').textContent=s.interval_minutes?
+      'co '+s.interval_minutes+' min':'wyłączone';
+    byId('quality').textContent='Strumień '+String(s.video_quality).toUpperCase()+
+      ', indeks '+s.requested_stream_index;
+    byId('devices').textContent=(s.devices||[]).map(d=>
+      d.name+' (…'+d.uid_suffix+')').join(' · ');
+    byId('diag').textContent=JSON.stringify(s.live_diagnostics||{},null,2);
+    if(!editing){
+      byId('fit').value=s.cyd_fit_mode;
+      byId('focus').value=s.cyd_focus_x;
+      applyMode();
+    }
+    const address='http://IP_HA:8100/snapshot-cyd-wide.jpg?token='+
+      encodeURIComponent(s.snapshot_token);
+    byId('url').textContent=address;
+    byId('widgeturl').textContent=address;
+    if(s.has_cyd_wide_image&&lastWide!==s.cyd_wide_revision){
+      lastWide=s.cyd_wide_revision;
+      byId('camera').src='snapshot-cyd-wide.jpg?v='+encodeURIComponent(lastWide);
+      byId('camera').hidden=false;byId('empty').hidden=true;
+    }else if(!s.has_cyd_wide_image){
+      byId('camera').hidden=true;byId('empty').hidden=false;
+      byId('empty').textContent='Brak zdjęcia. Użyj przycisku „Nowe zdjęcie”.';
+    }
+  }catch(e){byId('status').textContent='Nie można pobrać danych z UBox Bridge.';}
+}
+async function post(path,payload){
+  const opts={method:'POST'};
+  if(payload){opts.headers={'Content-Type':'application/json'};opts.body=JSON.stringify(payload);}
+  const response=await fetch(path,opts);
+  let json={};
+  try{json=await response.json();}catch(e){}
+  if(!response.ok)throw Error(json.message||'HTTP '+response.status);
+  return json;
+}
+async function action(path,payload){
+  if(working)return;
+  working=true;
+  try{return await post(path,payload);}
+  catch(e){byId('error').textContent=e.message;}
+  finally{working=false;await refresh();}
+}
+document.querySelectorAll('.ptz').forEach(button=>button.onclick=()=>
+  action('ptz',{direction:button.dataset.dir}));
+byId('capture').onclick=()=>action('capture');
+byId('discover').onclick=()=>action('discover');
+byId('rotate').onclick=()=>{
+  if(confirm('Zmiana tokenu odłączy dotychczasowe CYD i widżet. Kontynuować?'))
+    action('rotate-token');
+};
+async function saveFraming(){
+  if(working)return;
+  editing=true;working=true;
+  byId('fitstatus').textContent='Przygotowywanie nowego kadru z pamięci HA…';
+  try{
+    const result=await post('framing',{
+      mode:byId('fit').value,focus:Number(byId('focus').value)});
+    byId('fitstatus').textContent=result.message;
+  }catch(e){byId('fitstatus').textContent='Nie zapisano: '+e.message;}
+  finally{editing=false;working=false;await refresh();}
+}
+byId('fit').addEventListener('change',()=>{applyMode();saveFraming();});
+byId('focus').addEventListener('input',applyMode);
+byId('focus').addEventListener('change',saveFraming);
 refresh();setInterval(refresh,4000);
 </script></body></html>'''
 
