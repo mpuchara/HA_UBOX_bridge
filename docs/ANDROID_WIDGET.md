@@ -1,96 +1,88 @@
-# UBox Rożnów — Android Home Assistant Picture widget i PTZ
+# Android — widżet zdjęcia UBox i sterowanie kamerą w Home Assistant
 
-UBox Bridge 0.5.12+ udostępnia **ostatnie zapisane zdjęcie**, a nie stream RTSP.
-Najnowszy obraz zachowuje się jak zwykła encja kamery w Home Assistant,
-więc można użyć natywnego widżetu **Picture** w aplikacji Android.
+Dotyczy **UBox Bridge 0.5.12+** oraz aplikacji **Home Assistant Companion na Androidzie**. Zamiast budować dodatkową apkę, wykorzystujemy natywną encję **Generic Camera**, widżet **Picture** i opcjonalne skrypty PTZ. Nie potrzebujesz osobnej aplikacji UBox do wyświetlania zdjęcia z bridge’a.
 
-## 1. Zarejestruj kamerę w Home Assistant (raz)
+[← README](../README.md) · [Instalacja dodatku](INSTALL_HA.md) · [Panel](USER_GUIDE.md)
 
-1. HA → **Ustawienia → Urządzenia i usługi → Dodaj integrację** → **Generic Camera**.
-2. W polu **Still Image URL** wklej adres pokazany w panelu UBox Bridge
-   („Widżet na telefonie”), ale **IP_HA** zamień na lokalny adres
-   Raspberry Pi, np. \`192.168.1.40\`. Format:
-   \`http://IP_HA:8100/snapshot-cyd-wide.jpg?token=TWÓJ_TOKEN\`.
-3. **Stream Source URL** pozostaw puste — dodatek nie daje RTSP.
-4. Nazwij kamerę „UBox Rożnów”. Zanotuj jej entity_id,
-   np. \`camera.ubox_roznow\` (HA może nadać inne).
-5. Sprawdź obraz w widoku encji kamery w Home Assistant.
+## Co jest możliwe, a co nie?
 
-HA pobiera JPEG po sieci lokalnej, a następnie udostępnia go
-zalogowanym użytkownikom przez własny serwer/proxy. Dzięki temu widżet
-zadziała także poza domową siecią, **jeżeli** HA jest dostępny zdalnie
-(np. HA Cloud/VPN). Nie wystawiaj portu 8100 ani UBox w Internecie.
+| Funkcja | Android Picture | Dashboard w HA |
+| --- | --- | --- |
+| Ostatnie zapisane zdjęcie | **Tak** | **Tak** |
+| Odświeżenie istniejącego JPEG | **Tak** — działanie Refresh | Tak, przy odświeżeniu encji |
+| Strzałki PTZ na tym samym widżecie | **Nie** | **Tak**, jako przyciski poniżej zdjęcia |
+| PTZ z osobnych widżetów akcji | **Tak**, osobne Action button | Tak |
+| Wideo na żywo | **Nie** | **Nie** — bridge zapisuje pojedyncze klatki |
+| Nowa sesja LTE po dotknięciu Refresh | **Nie** | Nie, chyba że osobno wywołasz Nowe zdjęcie/PTZ |
 
-**Ważne:** token w URL działa również jako uprawnienie do wywołania PTZ,
-więc traktuj go jak hasło. Nie przesyłaj zrzutów ekranu z tokenem.
+**Uwaga:** oficjalny widżet Picture aktualizuje obraz zwykle **co godzinę** lub po dotknięciu (zależnie od wybranej akcji), zgodnie z [dokumentacją Companion](https://companion.home-assistant.io/docs/integrations/android-widgets/). Częstość odświeżania widżetu jest niezależna od harmonogramu pobierania zdjęć z kamery.
 
-## 2. Widżet na ekranie Androida
+## Krok 1. Utwórz encję Generic Camera (jednorazowo)
 
-Na Samsungu: przytrzymaj wolne miejsce na ekranie głównym → Widżety →
-**Home Assistant → Picture / Camera** → wybierz \`camera.ubox_roznow\`.
-Jako akcję po dotknięciu wybierz **Open** (otwiera kamerę) albo
-**Refresh** (ponownie pobiera JPEG z HA). Ustaw rozmiar widżetu.
+1. W Home Assistant wybierz **Ustawienia → Urządzenia i usługi → Dodaj integrację → Generic Camera**.
+2. W panelu dodatku UBox Bridge rozwiń **Widżet na telefonie z Home Assistant**. Skopiuj adres zdjęcia.
+3. Zastąp w nim `IP_HA` prawdziwym lokalnym IP Raspberry Pi (bez nawiasów i bez portu HA 8123), np.:
+   `http://192.168.1.40:8100/snapshot-cyd-wide.jpg?token=TWÓJ_TOKEN`
+4. Jako **Still Image URL** wpisz ten adres. **Stream Source URL** zostaw puste — bridge nie daje RTSP.
+5. Jeśli konfigurator ma opcję `Verify SSL` i zgłasza problem dla HTTP, użyj ustawienia odpowiedniego dla lokalnego HTTP, zgodnie z [Generic Camera](https://www.home-assistant.io/integrations/generic).
+6. Nazwij urządzenie „UBox Rożnów” i zapamiętaj identyfikator encji, np. `camera.ubox_roznow` (w Twoim HA może być inny).
+7. Sprawdź, czy encja pokazuje kadr także po ponownym uruchomieniu HA.
 
-Ten widget **pokazuje obraz, ale nie ma czterech strzałek PTZ**
-w swoim wnętrzu. Android Picture domyślnie odświeża obraz co około godzinę
-lub przy dotknięciu (nie jest to podgląd live). Jeżeli zależy Ci na
-sterowaniu, dodaj poniższe cztery widżety-akcje lub skrót do dashboardu.
+**Dlaczego to jest bezpieczniejsze?** Home Assistant pobiera obraz z bridge’a po LAN i udostępnia go zalogowanym użytkownikom przez własny proxy (`/api/camera_proxy/...`). Dostęp zdalny powinien odbywać się przez HA Cloud lub własny VPN, **bez otwierania TCP 8100 na routerze**.
 
-Oficjalna dokumentacja:
-https://companion.home-assistant.io/docs/integrations/android-widgets/
+**Ostrożnie z tokenem:** pełny URL kamery zawiera sekret UBox Bridge. Ustawienia Generic Camera zapisuj tylko w HA; nie wstawiaj prawdziwego tokenu do publicznego repozytorium ani na zrzuty ekranu.
 
-## 3. (Opcjonalnie) PTZ jako natywne akcje HA
+## Krok 2. Dodaj widżet Picture na Androidzie
 
-Jeżeli chcesz również przesuwać kamerę z ekranu Androida, umieść
-konfigurację z \`ha-examples/ubox_android_rest_command.yaml\` w swoim
-\`configuration.yaml\` (po uzgodnieniu z istniejącymi sekcjami
-\`rest_command\` i \`script\`). Zmień \`IP_HA\` i wstaw sekret lokalnie,
-**nie** do Git.
+1. Na telefonie przytrzymaj puste miejsce na ekranie startowym.
+2. **Widżety → Home Assistant → Picture** (w niektórych tłumaczeniach „Kamera”).
+3. Wybierz encję `camera.ubox_roznow` albo swój odpowiednik.
+4. Ustaw reakcję na dotknięcie: **Refresh** (odśwież obraz) lub **Open** (otwórz ekran encji kamery).
+5. Ustaw rozmiar widżetu, zatwierdź.
 
-W \`secrets.yaml\`:
+Jeżeli widżet nie odświeża się, sprawdź uprawnienia pracy w tle i wyłącz dla HA ograniczenia oszczędzania danych; w razie potrzeby usuń widżet i utwórz go ponownie. Szczegóły odświeżania zależą od systemu Android i ustawień aplikacji.
 
-\`\`\`yaml
-ubox_lan_token: "TWÓJ_TOKEN_Z_PANELU"
-\`\`\`
+## Krok 3. (Opcjonalnie) Cztery akcje PTZ jako skrypty HA
 
-W \`configuration.yaml\` (przykład gotowych sekcji jest w repo):
+W repo znajdują się gotowe **przykłady**, które trzeba ręcznie wprowadzić do konfiguracji Home Assistant:
 
-\`\`\`yaml
-rest_command: !include ha-examples/ubox_android_rest_command.yaml
-script: !include ha-examples/ubox_android_scripts.yaml
-\`\`\`
+- [REST-command z tokenem w nagłówku](../ha-examples/ubox_android_rest_command.yaml)
+- [Cztery skrypty ruchu](../ha-examples/ubox_android_scripts.yaml)
+- [Karta dashboardu: zdjęcie i 4 przyciski](../ha-examples/ubox_phone_cards.yaml)
 
-Skopiuj pliki do \`/config/ha-examples/\` (na serwerze HA), dopasuj adres
-Raspberry Pi. Nie nadpisuj całego \`script:\` albo \`rest_command:\`
-jeśli już go używasz — scal istniejącą konfigurację i zrestartuj HA.
+1. Skopiuj pierwsze dwa pliki do katalogu `/config/ha-examples/` na swoim HA.
+2. W pliku `ha-examples/ubox_android_rest_command.yaml` zmień **przykładowy adres 192.168.1.40** na adres własnego Raspberry Pi.
+3. Dodaj do **`/config/secrets.yaml`** sekretny nagłówek:
 
-Dostaniesz skrypty \`script.ubox_lewo\`, \`script.ubox_prawo\`,
-\`script.ubox_gora\` i \`script.ubox_dol\`. W Androidzie można dodać
-cztery **Action button** wywołujące \`script.turn_on\` z odpowiednią encją.
+   ~~~yaml
+   ubox_lan_token: "TWÓJ_TOKEN_Z_PANELU"
+   ~~~
 
-Każda taka akcja wykonuje pojedynczy krótki ruch, STOP i pobiera nowe
-zdjęcie tak samo jak gest na CYD. Nie przytrzymuj wielokrotnie przycisku
-w krótkim czasie — kamera LTE jest wolna i ma limit ochronny.
+4. Jeżeli Twoje `configuration.yaml` **nie ma** sekcji `rest_command` i `script`, możesz użyć:
 
-## 4. (Opcjonalnie) Jeden ekran z obrazem i strzałkami w HA
+   ~~~yaml
+   rest_command: !include ha-examples/ubox_android_rest_command.yaml
+   script: !include ha-examples/ubox_android_scripts.yaml
+   ~~~
 
-Dodaj nowy dashboard „Kamera Rożnów”, a w widoku
-**Edytuj → Dodaj kartę → Ręczny YAML** wklej
-\`ha-examples/ubox_phone_cards.yaml\`. Popraw entity_id kamery, jeśli
-HA nadał inne.
+   Jeśli masz już te sekcje lub własne skrypty, **nie zastępuj ich**. Scal zawartość plików z dotychczasowymi definicjami w odpowiednich sekcjach.
 
-Na telefonie w aplikacji HA: **Ustawienia → Aplikacja towarzysząca →
-Zarządzaj skrótami**. Utwórz skrót typu **Dashboard** do adresu
-własnego widoku, np. \`/dashboard-roznow/0\`. Będzie to ikona, która
-otwiera gotowy panel zdjęcia i sterowania. Skrót nie jest tym samym co
-widżet Picture, ale pozwala sterować ze smartfona bez otwierania kolejnych
-ekranów.
+5. Sprawdź poprawność konfiguracji HA, przeładuj REST commands / skrypty (jeśli obsługiwane), ewentualnie uruchom HA ponownie.
+6. Przetestuj `script.ubox_lewo` w **Narzędzia deweloperskie → Akcje**. Ma wykonać pojedynczy krótki ruch, STOP i zainicjować nową klatkę. Pamiętaj, że fizyczny PTZ przez P4P jest eksperymentalny.
 
-## 5. Kadr
+**Wariant bez edycji YAML:** możesz korzystać ze strzałek już w panelu dodatku UBox Bridge w aplikacji HA, otwierając jego Ingress. Skrypty są potrzebne dopiero dla dodatkowych przycisków HA/widgetów akcji.
 
-W panelu UBox wybierz jednym dotknięciem \`Blur\`, \`Cover\`, \`Contain\`.
-Nowa wersja JPEG zostaje wyliczona z zapisanej klatki w HA (bez LTE)
-i udostępniona także Generic Camera oraz widżetowi po odświeżeniu.
+## Krok 4. (Opcjonalnie) Widżety Action button lub dashboard telefonu
 
-Zmiana tokenu UBox spowoduje konieczność zaktualizowania URL w
-Generic Camera oraz nagłówka REST w \`secrets.yaml\`.
+**Cztery widżety:** dodaj **Home Assistant → Action button** dla akcji `script.turn_on` i odpowiedniej encji `script.ubox_lewo` / `script.ubox_prawo` / `script.ubox_gora` / `script.ubox_dol`. Każde naciśnięcie otwiera osobną sesję PTZ; zachowuj odstęp między ruchami.
+
+**Jeden ekran w HA:** dodaj do dashboardu kartę **Ręczny YAML** z zawartością [ubox_phone_cards.yaml](../ha-examples/ubox_phone_cards.yaml). Zamień `camera.ubox_roznow`, jeśli identyfikator jest inny. Na telefonie utwórz skrót do tego dashboardu lub dodaj go do ulubionych w aplikacji HA.
+
+**Ograniczenie:** standardowy Android Picture nie potrafi wstawić czterech przycisków na środek zdjęcia. Przełączaj się do panelu/dashboardu, gdy potrzebujesz PTZ.
+
+## Krok 5. Zmiana kadru albo tokenu
+
+- Wybranie w panelu **Blur / Cover / Contain** zmienia JPEG 320×240, który odczytuje także encja Generic Camera. Wystarczy odświeżyć widżet, **bez nowej transmisji LTE**.
+- Gdy w panelu użyjesz **Wygeneruj nowy token**, dotychczasowy URL i żądania PTZ przestaną działać. Uaktualnij **Generic Camera**, `secrets.yaml` oraz konfigurację CYD (jeśli używane).
+
+[Oficjalna dokumentacja widżetów Android](https://companion.home-assistant.io/docs/integrations/android-widgets/) · [Generic Camera](https://www.home-assistant.io/integrations/generic) · [RESTful Command](https://www.home-assistant.io/integrations/rest_command/).
