@@ -1,4 +1,4 @@
-# Rozwiązywanie problemów — UBox Bridge 0.5.13 / CYD 0.2.7
+# Rozwiązywanie problemów — UBox Bridge 0.5.13 / CYD 0.2.8
 
 [← README](../README.md) · [Instalacja HA](INSTALL_HA.md) · [Instalacja CYD](CYD_WEB_INSTALL.md) · [Bezpieczeństwo](SECURITY.md)
 
@@ -71,11 +71,15 @@ Urządzenie jest solarne i komunikuje się po LTE, więc opóźnienia poleceń o
 
 [Android — pełna instrukcja](ANDROID_WIDGET.md).
 
-## J. Czujnik jasności nie działa po włożeniu w obudowę
+## J. Ekran czarny bezpośrednio po wgraniu firmware
 
-W panelu powinien być widoczny odczyt **LDR (0–4095)**. Jeśli go nie ma, sprawdź, czy wgrałeś CYD 0.2.7, token i Wi-Fi. Jeżeli odczyt niemal się nie zmienia między dniem a nocą, osłona może zasłaniać czujnik; minimum rozróżnialności do kalibracji to 25 jednostek ADC. Sprawdź czujnik pod światłem i po zasłonięciu palcem. Warianty CYD mogą różnić się obsadzeniem elementów. Szczegóły: [Kalibracja jasności](BRIGHTNESS_CALIBRATION.md).
+CYD firmware 0.2.8 ustawia **100% podświetlenia** przed inicjalizacją LCD i aż do pierwszego poprawnego pobrania konfiguracji jasności z HA. Brak połączenia z HA nie powinien powodować czarnego ekranu. Jeśli telefon widzi Wi-Fi `CYD` (hasło `12345678`), firmware pracuje — sprawdź warianty **ST7789/GPIO27**, **ST7789/GPIO21**, **ILI9341/GPIO21**. Jeśli AP nie widać, sprawdź kabel/zasilanie i port szeregowy 115200. Test czterech kolorów nie korzysta z HA.
 
-## K. Jak bezpiecznie zgłaszać błąd
+## K. Czujnik jasności nie działa po włożeniu w obudowę
+
+W panelu powinien być widoczny odczyt **LDR (0–4095)**. Jeśli go nie ma, sprawdź, czy wgrałeś CYD 0.2.8, token i Wi-Fi. Jeżeli odczyt niemal się nie zmienia między dniem a nocą, osłona może zasłaniać czujnik; minimum rozróżnialności do kalibracji to 25 jednostek ADC. Sprawdź czujnik pod światłem i po zasłonięciu palcem. Warianty CYD mogą różnić się obsadzeniem elementów. Szczegóły: [Kalibracja jasności](BRIGHTNESS_CALIBRATION.md).
+
+## L. Jak bezpiecznie zgłaszać błąd
 
 Podaj **wersję Bridge**, **wersję CYD**, wariant LCD (ST7789/ILI9341), **model kamery**, wybrany tryb HD/SD, opis ostatniej czynności i datę zdjęcia. Dołącz zdjęcie ekranu testowego LCD lub skadrowany fragment diagnostyki **po usunięciu** UID, adresu konta, hasła i tokenu.
 

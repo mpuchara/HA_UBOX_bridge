@@ -1,6 +1,6 @@
 # UBox Bridge — kamera UBox/XEGA w Home Assistant, CYD i Androidzie
 
-**Aktualny zestaw:** UBox Bridge **0.5.13** (Home Assistant OS) + CYD Monitor **0.2.7** (ESP32-2432S028). Projekt jest eksperymentalny i nie jest oficjalną integracją UBox/XEGA.
+**Aktualny zestaw:** UBox Bridge **0.5.13** (Home Assistant OS) + CYD Monitor **0.2.8** (ESP32-2432S028). Projekt jest eksperymentalny i nie jest oficjalną integracją UBox/XEGA.
 
 Mostek łączy się z kamerą LTE/solarną przez P4P, przechwytuje klatkę z H.264/H.265, zapisuje **JPEG w rzeczywiście otrzymanej rozdzielczości** i przygotowuje osobny obraz **320×240** dla dotykowego CYD. Zapisane zdjęcie można wyświetlić także w aplikacji Home Assistant na Androidzie. Nie jest to ciągły podgląd na żywo.
 
@@ -23,7 +23,7 @@ Mostek łączy się z kamerą LTE/solarną przez P4P, przechwytuje klatkę z H.2
 
 - Home Assistant OS na **aarch64** (np. Raspberry Pi 4) lub **amd64**; zainstalowany dodatek UBox Bridge.
 - Kamera obsługiwana przez UBox, np. **XEGA XG-01-EU4G**, z kontem UBox albo UID i hasłem urządzenia P2P. Obsługa innych modeli nie jest gwarantowana.
-- Dla CYD: **ESP32-2432S028 2,8″ z XPT2046** i sprawnym Wi-Fi 2,4 GHz; do wyboru warianty LCD **ST7789** i **ILI9341**.
+- Dla CYD: **ESP32-2432S028 2,8″ z XPT2046** i sprawnym Wi-Fi 2,4 GHz; do wyboru profile **ST7789/GPIO27**, **ST7789/GPIO21** oraz **ILI9341/GPIO21**.
 - Łączność sieciowa: dodatek HA → internet/P4P; CYD → Raspberry Pi na TCP **8100**; telefon → Home Assistant.
 
 ## Instalacja w skrócie
@@ -32,7 +32,7 @@ Mostek łączy się z kamerą LTE/solarną przez P4P, przechwytuje klatkę z H.2
 2. Zainstaluj **UBox Bridge 0.5.13**, uzupełnij login UBox albo dane P2P, uruchom dodatek i otwórz panel **UBox Bridge**.
 3. Naciśnij **Nowe zdjęcie**. Zweryfikuj, że widoczny jest aktualny kadr oraz data ostatniego udanego pobrania.
 4. Wybierz z listy **Blur / Cover / Contain**. Zmiana przelicza lokalnie zachowany JPEG i **nie budzi kamery LTE**.
-5. Opcjonalnie wgraj CYD 0.2.7 przez [instalator w przeglądarce](https://mpuchara.github.io/HA_UBOX_bridge/) lub [instalator Windows ZIP](https://github.com/mpuchara/HA_UBOX_bridge/releases). Konfiguracja AP: **CYD / 12345678**; portal: `http://192.168.4.1`.
+5. Opcjonalnie wgraj CYD 0.2.8 przez [instalator w przeglądarce](https://mpuchara.github.io/HA_UBOX_bridge/) lub [instalator Windows ZIP](https://github.com/mpuchara/HA_UBOX_bridge/releases). Konfiguracja AP: **CYD / 12345678**; portal: `http://192.168.4.1`.
 6. Opcjonalnie zarejestruj [Generic Camera](docs/ANDROID_WIDGET.md) w HA i dodaj na Androidzie widżet **Picture**.
 
 **Pobierz aktualny dodatek:** [UBox Bridge v0.5.13](https://github.com/mpuchara/HA_UBOX_bridge/releases/tag/v0.5.13) (wydanie eksperymentalne). Dla zwykłej instalacji HA OS zalecamy sklep dodatków; dostępne pliki ZIP służą także do instalacji ręcznej i archiwizacji.
@@ -54,6 +54,8 @@ Kamera XEGA/UBox (LTE, bateria słoneczna)
 **Fotografia a sterowanie:** CYD oraz widżet Androida czytają plik z pamięci HA. Samo odświeżenie tego pliku przez HTTP **nie** łączy się z LTE. Nowa transmisja pojawia się dopiero po ręcznym pobraniu, automatycznym harmonogramie lub po poleceniu ruchu PTZ.
 
 **PTZ (eksperymentalnie):** krótkie polecenia lewo/prawo/góra/dół, zatrzymanie i próba pobrania nowego zdjęcia. Domyślny impuls **100 ms**, prędkość **1**, regulacja w ustawieniach dodatku. Fizyczne zachowanie zależy od firmware kamery.
+
+**Brak obrazu po instalacji?** W 0.2.8 podświetlenie jest pełne już przed Wi-Fi/HA. Dwuportowe CYD występują w rewizjach z GPIO27 lub GPIO21 dla podświetlenia. Jeśli widzisz AP `CYD`, ale LCD jest czarny, wypróbuj drugi wariant w instalatorze — nie trzeba czekać na połączenie z HA.
 
 ## Ważne ograniczenia
 

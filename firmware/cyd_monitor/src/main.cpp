@@ -594,10 +594,10 @@ void setup() {
   if(backlightPwmReady)ledcWrite(TFT_BACKLIGHT_PIN,255);
   else {pinMode(TFT_BACKLIGHT_PIN,OUTPUT);digitalWrite(TFT_BACKLIGHT_PIN,HIGH);}
 #if defined(ST7789_DRIVER)
-  Serial.printf("CYD LCD ST7789, BL GPIO%d, PWM=%s\\n",TFT_BACKLIGHT_PIN,
+  Serial.printf("CYD LCD ST7789, BL GPIO%d, PWM=%s\n",TFT_BACKLIGHT_PIN,
                 backlightPwmReady?"ok":"fallback high");
 #else
-  Serial.printf("CYD LCD ILI9341, BL GPIO%d, PWM=%s\\n",TFT_BACKLIGHT_PIN,
+  Serial.printf("CYD LCD ILI9341, BL GPIO%d, PWM=%s\n",TFT_BACKLIGHT_PIN,
                 backlightPwmReady?"ok":"fallback high");
 #endif
   displaySelfTest();

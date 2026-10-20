@@ -1,6 +1,6 @@
 # CYD ESP32-2432S028 — instalacja, połączenie i gesty PTZ
 
-**Aktualny firmware: 0.2.7** · **Wymaga UBox Bridge 0.5.13 dla regulacji jasności**.
+**Aktualny firmware: 0.2.8** · **Wymaga UBox Bridge 0.5.13 dla regulacji jasności**.
 
 [← README](../README.md) · [Instalacja HA](INSTALL_HA.md) · [Obsługa](USER_GUIDE.md) · [Rozwiązywanie problemów](TROUBLESHOOTING.md)
 
@@ -10,10 +10,11 @@ Firmware przygotowano dla **klasycznego ESP32-2432S028 2,8 cala / 240×320** z p
 
 | Wariant LCD | Kiedy wybrać |
 | --- | --- |
-| **ST7789** | Pierwszy test na płytce z dwoma gniazdami USB (USB-C i micro-USB); na tej odmianie obraz działał poprawnie. |
-| **ILI9341** | Alternatywa, gdy test kolorów lub wyświetlanie ST7789 jest niepoprawne. |
+| **ST7789/GPIO27** | Pierwszy test na dwuportowej Rv3, w której GPIO27 steruje podświetleniem. |
+| **ST7789/GPIO21** | Alternatywna rewizja ST7789. |
+| **ILI9341/GPIO21** | Inny sterownik LCD i podświetlenie GPIO21. |
 
-Model i rozstaw pinów są ważniejsze niż sam wygląd płytki. **Nie flashuj** tego obrazu na ESP32-S3, ESP32-P4 ani na innych niezgodnych wersjach CYD. Jeśli po uruchomieniu widać pasy, niekompletny obraz lub dziwne kolory, wypróbuj drugi wariant sterownika.
+Model i rozstaw pinów są ważniejsze niż sam wygląd płytki. **Nie flashuj** tego obrazu na ESP32-S3, ESP32-P4 ani na innych niezgodnych wersjach CYD. Jeśli obraz jest nieprawidłowy, wypróbuj kolejny wariant sterownika. Czarny ekran przed konfiguracją HA to najczęściej niewłaściwy profil podświetlenia/panelu albo problem z zasilaniem.
 
 ## 2. Co przygotować przed wgraniem
 
@@ -29,9 +30,9 @@ Model i rozstaw pinów są ważniejsze niż sam wygląd płytki. **Nie flashuj**
 
 1. Podłącz CYD przez USB do komputera Windows. Port może być **COM4**, ale nie zakładaj stałego numeru.
 2. Otwórz instalator w aktualnym **Chrome** lub **Edge** z obsługą Web Serial.
-3. Kliknij **ST7789**, jeżeli masz tę samą dwuportową płytkę; jeśli obraz nie działa poprawnie, wybierz **ILI9341**.
+3. Wgraj **ST7789/GPIO27**. Jeśli ekran jest czarny, spróbuj **ST7789/GPIO21**, potem **ILI9341/GPIO21**.
 4. Wybierz rozpoznany port COM, zaakceptuj instalację i zaczekaj na koniec flashowania.
-5. Po uruchomieniu sprawdź cztery pola testowe: czerwone, zielone, niebieskie i białe. Nie powinno być pasków ani fragmentów starego obrazu.
+5. Po uruchomieniu sprawdź cztery pola testowe: czerwone, zielone, niebieskie i białe — z numerem pinu BL. Nie powinno być pasków ani fragmentów starego obrazu.
 6. Skonfiguruj Wi-Fi i token zgodnie z krokiem 5 poniżej.
 
 **Uwaga:** pierwsza instalacja lub wybór kasowania może wyczyścić pamięć flash i zapisane Wi-Fi/token. Gdy instalator Web Serial nie działa, sprawdź kabel, sterowniki USB, inne aplikacje używające COM oraz [diagnostykę](TROUBLESHOOTING.md).
@@ -40,7 +41,7 @@ Jeśli GitHub Pages nie jest aktywne: repozytorium → **Settings → Pages → 
 
 ## 4. Alternatywa: instalator Windows ZIP (bez PlatformIO)
 
-[Pobierz CYD 0.2.7 dla Windows](https://github.com/mpuchara/HA_UBOX_bridge/releases/tag/cyd-v0.2.7-ab3800d8) → `UBox-CYD-Windows-Browser-Installer.zip`.
+[Pobierz CYD 0.2.8 dla Windows](https://github.com/mpuchara/HA_UBOX_bridge/releases) → `UBox-CYD-Windows-Browser-Installer.zip`.
 
 1. **Wypakuj** całe archiwum do folderu, nie uruchamiaj skryptu z podglądu ZIP.
 2. Uruchom `Start-Installer.cmd`. Otworzy się lokalny serwer HTTP na `127.0.0.1` i przeglądarka.
@@ -48,6 +49,8 @@ Jeśli GitHub Pages nie jest aktywne: repozytorium → **Settings → Pages → 
 4. Nie zamykaj okna z serwerem do zakończenia instalacji.
 
 Instalator nie potrzebuje Pythona ani PlatformIO na komputerze. Do załadowania ESP Web Tools wymagane jest połączenie przeglądarki z internetem. [Szczegóły Windows](../windows-installer/README.md).
+
+**Uwaga:** Firmware do pierwszej udanej synchronizacji konfiguracji jasności z HA utrzymuje podświetlenie na **100%**. Gdy AP `CYD` działa, a ekran jest czarny, nie czekaj na HA: wgraj inny profil LCD/BL. Przez monitor portu COM przy 115200 zobaczysz model LCD, GPIO podświetlenia i status PWM.
 
 ## 5. Pierwsze połączenie CYD z Home Assistant
 
