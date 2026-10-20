@@ -1,6 +1,6 @@
 # Instalacja i aktualizacja UBox Bridge w Home Assistant OS
 
-**Dotyczy:** UBox Bridge **0.5.12**, Home Assistant OS **aarch64/amd64**, XEGA/UBox przez P4P. Dodatek jest eksperymentalny, nie jest oficjalnym klientem UBox.
+**Dotyczy:** UBox Bridge **0.5.13**, Home Assistant OS **aarch64/amd64**, XEGA/UBox przez P4P. Dodatek jest eksperymentalny, nie jest oficjalnym klientem UBox.
 
 [← README](../README.md) · [Obsługa](USER_GUIDE.md) · [CYD](CYD_WEB_INSTALL.md) · [Android](ANDROID_WIDGET.md)
 

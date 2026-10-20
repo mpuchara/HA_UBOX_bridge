@@ -29,6 +29,10 @@ UBox Bridge to **eksperymentalny mostek P4P**, nie oficjalna integracja UBox. Pr
 - Ruchy PTZ są krótkie, mają STOP i blokadę nakładania, ale kamera może zareagować z opóźnieniem lub inaczej, niż oczekiwano.
 - Nie uruchamiaj „stress testów” ciągłego PTZ ani przechwytywania co kilka sekund na baterii solarnej.
 
+## Jasność CYD
+
+Odczyt z GPIO34, kalibracja i podgląd PWM odbywają się wyłącznie w LAN między CYD a HA. Nie wymagają połączenia z kamerą LTE. Punkty jasności zapisują się w `/data/brightness.json` oraz NVS urządzenia i po restarcie nadal działają. W razie braku kalibracji urządzenie używa 100% jasności (z wyjątkiem 30-sekundowej próby).
+
 ## Token i API
 
 **Odczyt JPEG:** `GET http://IP_HA:8100/snapshot-cyd-wide.jpg` z nagłówkiem `X-UBox-Token: TOKEN`; Generic Camera obsługuje również parametr `?token=TOKEN`.

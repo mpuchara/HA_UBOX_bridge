@@ -1,6 +1,6 @@
-# CYD Monitor — firmware 0.2.6
+# CYD Monitor — firmware 0.2.7
 
-**Obsługiwany sprzęt:** ESP32-2432S028 (2,8″, 240×320) z dotykiem XPT2046. **Zalecany dodatek Home Assistant: UBox Bridge 0.5.12**; dla gestów PTZ minimum 0.5.10.
+**Obsługiwany sprzęt:** ESP32-2432S028 (2,8″, 240×320) z dotykiem XPT2046. **Zalecany dodatek Home Assistant: UBox Bridge 0.5.13**; dla gestów PTZ minimum 0.5.10.
 
 [← README](../../README.md) · [Instalacja krok po kroku](../../docs/CYD_WEB_INSTALL.md) · [Diagnostyka](../../docs/TROUBLESHOOTING.md)
 
@@ -39,6 +39,10 @@ Przy pierwszym uruchomieniu dotknij **3 żółtych krzyżyków**. Bez kalibracji
 Nie wciskaj BOOT podczas włączania/resetu (ESP32 może wejść w tryb bootloadera).
 
 Gest po zdjęciu >~38 px w jednym kierunku = **jeden ruch** (nie ciągły joystick). Czas ruchu ustawia dodatek HA: domyślnie `ptz_pulse_ms: 100` i `ptz_speed: 1`. Ruchy i STOP są eksperymentalne dla różnych firmware kamer UBox.
+
+## Podświetlenie LCD / czujnik LDR
+
+Od firmware 0.2.7 GPIO21 steruje podświetleniem przez PWM, a GPIO34 (ADC1) mierzy fotorezystor. Po założeniu obudowy w panelu UBox Bridge wybierz dwa punkty **Noc** i **Dzień**, zapisując faktyczny odczyt i wybrany procent jasności. ESP32 interpoluje pomiędzy nimi, wygładza pomiar i zapisuje punkty w NVS. [Kalibracja krok po kroku](../../docs/BRIGHTNESS_CALIBRATION.md).
 
 ## Kompilacja ze źródeł
 

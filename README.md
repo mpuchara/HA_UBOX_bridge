@@ -1,6 +1,6 @@
 # UBox Bridge — kamera UBox/XEGA w Home Assistant, CYD i Androidzie
 
-**Aktualny zestaw:** UBox Bridge **0.5.12** (Home Assistant OS) + CYD Monitor **0.2.6** (ESP32-2432S028). Projekt jest eksperymentalny i nie jest oficjalną integracją UBox/XEGA.
+**Aktualny zestaw:** UBox Bridge **0.5.13** (Home Assistant OS) + CYD Monitor **0.2.7** (ESP32-2432S028). Projekt jest eksperymentalny i nie jest oficjalną integracją UBox/XEGA.
 
 Mostek łączy się z kamerą LTE/solarną przez P4P, przechwytuje klatkę z H.264/H.265, zapisuje **JPEG w rzeczywiście otrzymanej rozdzielczości** i przygotowuje osobny obraz **320×240** dla dotykowego CYD. Zapisane zdjęcie można wyświetlić także w aplikacji Home Assistant na Androidzie. Nie jest to ciągły podgląd na żywo.
 
@@ -13,6 +13,7 @@ Mostek łączy się z kamerą LTE/solarną przez P4P, przechwytuje klatkę z H.2
 | Wgranie firmware i skonfigurowanie CYD | [Instalacja CYD przez USB](docs/CYD_WEB_INSTALL.md) |
 | Widżet ze zdjęciem i sterowanie na Androidzie | [Android / Generic Camera / PTZ](docs/ANDROID_WIDGET.md) |
 | Problemy z połączeniem, kadrem, dotykiem lub PTZ | [Rozwiązywanie problemów](docs/TROUBLESHOOTING.md) |
+| Automatyczne podświetlenie po montażu w obudowie | [Kalibracja LDR i jasności](docs/BRIGHTNESS_CALIBRATION.md) |
 | Tokeny, dostęp LAN, bateria i prywatność | [Bezpieczeństwo](docs/SECURITY.md) |
 | Zasada działania i API HTTP | [Dokumentacja techniczna](ubox_bridge/DOCS.md) |
 | Wykrywanie urządzeń przez konto UBox | [Logowanie UBox](docs/CLOUD_LOGIN.md) |
@@ -34,7 +35,7 @@ Mostek łączy się z kamerą LTE/solarną przez P4P, przechwytuje klatkę z H.2
 5. Opcjonalnie wgraj CYD 0.2.6 przez [instalator w przeglądarce](https://mpuchara.github.io/HA_UBOX_bridge/) lub [instalator Windows ZIP](https://github.com/mpuchara/HA_UBOX_bridge/releases/tag/cyd-v0.2.6-fe27042c). Konfiguracja AP: **CYD / 12345678**; portal: `http://192.168.4.1`.
 6. Opcjonalnie zarejestruj [Generic Camera](docs/ANDROID_WIDGET.md) w HA i dodaj na Androidzie widżet **Picture**.
 
-**Pobierz aktualny dodatek:** [UBox Bridge v0.5.12](https://github.com/mpuchara/HA_UBOX_bridge/releases/tag/v0.5.12) (wydanie eksperymentalne). Dla zwykłej instalacji HA OS zalecamy sklep dodatków; dostępne pliki ZIP służą także do instalacji ręcznej i archiwizacji.
+**Pobierz aktualny dodatek:** [UBox Bridge v0.5.13](https://github.com/mpuchara/HA_UBOX_bridge/releases/tag/v0.5.13) (wydanie eksperymentalne). Dla zwykłej instalacji HA OS zalecamy sklep dodatków; dostępne pliki ZIP służą także do instalacji ręcznej i archiwizacji.
 
 ## Bieżący sposób działania
 

@@ -1,4 +1,4 @@
-# Windows — instalator CYD 0.2.6 (portable)
+# Windows — instalator CYD 0.2.7 (portable)
 
 Bez Pythona, PlatformIO ani praw administratora. Wymaga Chrome/Edge, Web Serial, kabla USB do danych i połączenia przeglądarki z internetem (skrypt ESP Web Tools z CDN).
 

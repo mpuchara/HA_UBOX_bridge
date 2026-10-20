@@ -1,6 +1,6 @@
 # Obsługa UBox Bridge: zdjęcia, PTZ i kadrowanie
 
-**Aktualny zestaw:** Bridge **0.5.12**, CYD **0.2.6** (jeśli używany). Panel jest dostępny przez Home Assistant Ingress.
+**Aktualny zestaw:** Bridge **0.5.13**, CYD **0.2.7** (jeśli używany). Panel jest dostępny przez Home Assistant Ingress.
 
 [← README](../README.md) · [Instalacja HA](INSTALL_HA.md) · [Android](ANDROID_WIDGET.md)
 
@@ -66,6 +66,10 @@ Wybierz tryb z rozwijanej listy. Po krótkim przeliczeniu panel i CYD pobiorą n
 **Źródło X×Y** — rozdzielczość ostatniej zapisanej klatki, nie rozdzielczość matrycy podana na pudełku.
 
 **PTZ niedostępny / brak nowego zdjęcia** — transport nie potwierdził powodzenia albo nie uzyskano nowej klatki. Sprawdź logi i [rozwiązywanie problemów](TROUBLESHOOTING.md).
+
+## Automatyczna jasność CYD
+
+W panelu poniżej kadrowania znajduje się sekcja **Automatyczna jasność CYD**. Odczyt fotorezystora (ADC 0–4095, GPIO34) jest raportowany przez ESP32. Po instalacji ekranu w obudowie ustaw komfortową jasność „Noc” i „Dzień”, korzystając z przycisków **Wypróbuj na 30 s** i **Zapisz przy obecnym pomiarze**. Po dwóch pomiarach działanie AUTO jest lokalne w ESP32 i nie zależy od godziny zachodu. [Szczegóły kalibracji](BRIGHTNESS_CALIBRATION.md).
 
 ## Dalsze możliwości
 

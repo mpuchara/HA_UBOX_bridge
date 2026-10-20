@@ -1,4 +1,4 @@
-# Rozwiązywanie problemów — UBox Bridge 0.5.12 / CYD 0.2.6
+# Rozwiązywanie problemów — UBox Bridge 0.5.13 / CYD 0.2.7
 
 [← README](../README.md) · [Instalacja HA](INSTALL_HA.md) · [Instalacja CYD](CYD_WEB_INSTALL.md) · [Bezpieczeństwo](SECURITY.md)
 
@@ -71,7 +71,11 @@ Urządzenie jest solarne i komunikuje się po LTE, więc opóźnienia poleceń o
 
 [Android — pełna instrukcja](ANDROID_WIDGET.md).
 
-## J. Jak bezpiecznie zgłaszać błąd
+## J. Czujnik jasności nie działa po włożeniu w obudowę
+
+W panelu powinien być widoczny odczyt **LDR (0–4095)**. Jeśli go nie ma, sprawdź, czy wgrałeś CYD 0.2.7, token i Wi-Fi. Jeżeli odczyt niemal się nie zmienia między dniem a nocą, osłona może zasłaniać czujnik; minimum rozróżnialności do kalibracji to 25 jednostek ADC. Sprawdź czujnik pod światłem i po zasłonięciu palcem. Warianty CYD mogą różnić się obsadzeniem elementów. Szczegóły: [Kalibracja jasności](BRIGHTNESS_CALIBRATION.md).
+
+## K. Jak bezpiecznie zgłaszać błąd
 
 Podaj **wersję Bridge**, **wersję CYD**, wariant LCD (ST7789/ILI9341), **model kamery**, wybrany tryb HD/SD, opis ostatniej czynności i datę zdjęcia. Dołącz zdjęcie ekranu testowego LCD lub skadrowany fragment diagnostyki **po usunięciu** UID, adresu konta, hasła i tokenu.
 

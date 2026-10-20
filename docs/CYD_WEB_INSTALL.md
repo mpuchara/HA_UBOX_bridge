@@ -1,6 +1,6 @@
 # CYD ESP32-2432S028 — instalacja, połączenie i gesty PTZ
 
-**Aktualny firmware: 0.2.6** · **Wymaga UBox Bridge 0.5.10 lub nowszego; zalecany 0.5.12**.
+**Aktualny firmware: 0.2.7** · **Wymaga UBox Bridge 0.5.13 dla regulacji jasności**.
 
 [← README](../README.md) · [Instalacja HA](INSTALL_HA.md) · [Obsługa](USER_GUIDE.md) · [Rozwiązywanie problemów](TROUBLESHOOTING.md)
 
@@ -91,6 +91,10 @@ Sprawdź po kolei:
 
 Szczegóły: [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
-## 8. Bezpieczeństwo
+## 8. Kalibracja automatycznej jasności
+
+Po umieszczeniu płytki w docelowej obudowie otwórz panel UBox Bridge → **Automatyczna jasność CYD**. Sprawdź odczyt ADC z GPIO34, wybierz suwakiem jasność „Noc”, użyj przycisku **Wypróbuj**, a potem **Zapisz noc przy obecnym pomiarze**. W dzień powtórz dla punktu „Dzień”. Po zapisie dwóch różnych odczytów ESP32 interpoluje poziom podświetlenia między nimi (PWM GPIO21). Pełna instrukcja: [Kalibracja jasności](BRIGHTNESS_CALIBRATION.md).
+
+## 9. Bezpieczeństwo
 
 Portal Wi-Fi pod `192.168.4.1` nie przekazuje poświadczeń do witryny GitHub Pages. Dane Wi-Fi i token są zapisywane lokalnie w NVS ESP32. Token UBox Bridge **pozwala również wykonywać ruchy PTZ** przez LAN — traktuj go jak hasło, nie publikuj zdjęć zawierających token i **nie wystawiaj portu 8100 na internet**.

@@ -1,4 +1,4 @@
-# UBox Bridge 0.5.12 — dodatek Home Assistant OS
+# UBox Bridge 0.5.13 — dodatek Home Assistant OS
 
 **Eksperymentalny mostek UBox P4P / XEGA 4G** działający na HA OS (`aarch64` i `amd64`). Nie jest to oficjalne SDK UBox.
 
@@ -30,6 +30,10 @@ Panel wyświetla **jedno zdjęcie 320×240 na górze**, pod nim strzałki PTZ, p
 - `/data/last_cyd.jpg` — stary wariant pionowy, tylko dla zgodności.
 - `/data/snapshot_token` — token dostępu do zdjęć **i** PTZ.
 - `/data/framing.json` — kadrowanie z panelu Ingress.
+
+## Kalibracja jasności CYD
+
+Panel pobiera pomiary LDR z ESP32 przez autoryzowane API LAN i pozwala zapisać dwa zestawy **ADC → jasność PWM**: Noc oraz Dzień. Zapis jest utrzymywany w `/data/brightness.json` i synchronizowany do NVS ESP32 0.2.7+. Kalibracja może być wykonana po umieszczeniu płytki w obudowie; nie uruchamia P4P. [Instrukcja kalibracji](../docs/BRIGHTNESS_CALIBRATION.md).
 
 ## API
 

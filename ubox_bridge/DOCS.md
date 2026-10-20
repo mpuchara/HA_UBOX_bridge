@@ -1,4 +1,4 @@
-# UBox Bridge 0.5.12 — architektura i HTTP API
+# UBox Bridge 0.5.13 — architektura i HTTP API
 
 [← README](../README.md) · [Instrukcja obsługi](../docs/USER_GUIDE.md) · [Bezpieczeństwo](../docs/SECURITY.md)
 
@@ -61,6 +61,10 @@ Odpowiedź `202` = przyjęto; `400` = nieprawidłowy kierunek; `401` = brak toke
 ~~~
 
 `mode` = `blur` / `cover` / `contain`, `focus` = 0–100 (int). Po udanym przeliczeniu `last_cyd_wide.jpg` i zapisaniu `/data/framing.json` nowy ETag jest dostępny od razu; nie budzi LTE. Wariant poziomy **nie obraca** źródłowej klatki.
+
+## LDR / jasność CYD (0.5.13 + CYD 0.2.7)
+
+ESP32 raportuje GPIO34 (ADC1) i jasność podświetlenia co około 10 s przez `POST /brightness-telemetry` (port 8100, nagłówek tokenu, JSON `{"raw":1234,"percent":70}`). Firmware odczytuje `GET /brightness-config.json` z tokenem, otrzymuje punkty `night`/`day` i opcjonalny podgląd na 30 s. W panelu Ingress kalibracja działa przez `POST /brightness-calibrate` (`{"anchor":"night","percent":12}`) lub analogicznie `day`, próbne sterowanie przez `POST /brightness-preview` (`{"percent":12}`), reset przez `POST /brightness-reset`. Punkty przechowywane są w `/data/brightness.json`. Kalibracja **nie** wywołuje LTE. [Instrukcja](../docs/BRIGHTNESS_CALIBRATION.md).
 
 ## Pliki trwałe
 
