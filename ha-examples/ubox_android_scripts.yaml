@@ -1,0 +1,25 @@
+# Use as content of "script: !include ha-examples/ubox_android_scripts.yaml"
+ubox_lewo:
+  alias: UBox Rożnów w lewo
+  sequence:
+    - action: rest_command.ubox_move
+      data:
+        direction: left
+ubox_prawo:
+  alias: UBox Rożnów w prawo
+  sequence:
+    - action: rest_command.ubox_move
+      data:
+        direction: right
+ubox_gora:
+  alias: UBox Rożnów w górę
+  sequence:
+    - action: rest_command.ubox_move
+      data:
+        direction: up
+ubox_dol:
+  alias: UBox Rożnów w dół
+  sequence:
+    - action: rest_command.ubox_move
+      data:
+        direction: down

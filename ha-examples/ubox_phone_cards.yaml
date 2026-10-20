@@ -1,0 +1,46 @@
+# Paste as manual card YAML on a dedicated HA dashboard.
+# Replace camera.ubox_roznow if your entity uses a different ID.
+type: vertical-stack
+cards:
+  - type: picture-entity
+    entity: camera.ubox_roznow
+    camera_view: auto
+    show_state: false
+    show_name: false
+    fit_mode: contain
+  - type: grid
+    columns: 4
+    square: false
+    cards:
+      - type: button
+        name: Lewo
+        icon: mdi:arrow-left-bold
+        tap_action:
+          action: perform-action
+          perform_action: script.turn_on
+          target:
+            entity_id: script.ubox_lewo
+      - type: button
+        name: Góra
+        icon: mdi:arrow-up-bold
+        tap_action:
+          action: perform-action
+          perform_action: script.turn_on
+          target:
+            entity_id: script.ubox_gora
+      - type: button
+        name: Dół
+        icon: mdi:arrow-down-bold
+        tap_action:
+          action: perform-action
+          perform_action: script.turn_on
+          target:
+            entity_id: script.ubox_dol
+      - type: button
+        name: Prawo
+        icon: mdi:arrow-right-bold
+        tap_action:
+          action: perform-action
+          perform_action: script.turn_on
+          target:
+            entity_id: script.ubox_prawo

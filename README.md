@@ -18,7 +18,7 @@ captures a HEVC/H.264 frame and stores a full-resolution JPEG from the actual P4
 Add this repository to the HAOS add-on store:
 `https://github.com/mpuchara/HA_UBOX_bridge`
 
-Install/upgrade **UBox Bridge** to v0.5.10. Existing UBox login options and
+Install/upgrade **UBox Bridge** to v0.5.12. Existing UBox login options and
 cached image are preserved. Change `interval_minutes` in the add-on
 configuration to **15** for a fresh snapshot every 15 minutes (or **0** to
 disable automatic capture); **existing installations keep the previous
@@ -152,3 +152,18 @@ regression: speed at byte 2, direction at byte 5 and all-zero STOP.
 Prior implementation used an incorrect third-party format; this could
 cause both left/right swipes to move only left and oversized movements.
 Firmware **CYD 0.2.6 stays unchanged**; upgrade addon only.
+
+## Mobile-first panel, fitting selector, Android Picture widget (v0.5.12)
+
+The add-on panel now opens with a single CYD 320×240 snapshot on top,
+PTZ controls below, and a native dropdown for Blur / Cover / Contain.
+For Cover, use the horizontal crop-position slider. Choices are persisted
+under /data/framing.json and immediately regenerate the cached CYD JPEG
+without any camera LTE wakeup. The addon config mode is also a dropdown.
+
+For **Android Home Assistant Picture widgets**, add the bridge URL to a
+**Generic Camera** integration (HA acts as authenticated image proxy) and
+select its camera entity in the official HA Android Picture widget.
+Control arrows are not embedded in the widget; for remote control use a
+phone dashboard or four Action button widgets with the ready-made example
+files at [docs/ANDROID_WIDGET.md](docs/ANDROID_WIDGET.md).

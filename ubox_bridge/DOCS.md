@@ -19,9 +19,8 @@ Metadata is available from `/snapshot-meta.json` (token required).
 
 ## Authentication
 
-Port 8099 is Ingress only (HA Supervisor proxy). Port 8100 has a
-GET-only JPEG endpoint and a GET-only metadata endpoint, both guarded
-by a per-install token (in header or query). The token can be rotated
+Port 8099 is Ingress only (HA Supervisor proxy). Port 8100 provides token-protected JPEG and metadata GET endpoints, and
+only one bounded PTZ POST endpoint guarded by an X-UBox-Token header. The token can be rotated
 from the Ingress panel. Never expose the port on a WAN router.
 The UBox account password remains in HA add-on local options. Do not
 commit or screenshot passwords or the token.
@@ -39,3 +38,17 @@ token if an old URL has been shared.
 UBox live bridge comes from the pinned asyrk/ubox-web 2026-09-10
 commit. Upstream's author says the implementation is experimental and
 not fully security-audited.
+
+## Phone UI and framing
+
+In UBox Bridge v0.5.12 the one-shot photo appears first, followed by PTZ
+arrows and the Blur/Cover/Contain dropdown. Panel changes to the framing
+persist under /data/framing.json and are applied from the cached native
+JPEG without LTE traffic. This file overrides the old addon configuration
+fit values once a panel choice is made.
+
+For Home Assistant Android Picture widgets, register a Generic Camera
+entity with /snapshot-cyd-wide.jpg?token=... on the HA LAN and select the
+entity in the HA companion widget. HA Core proxies the JPEG, so external
+access works through your existing authenticated HA endpoint, not 8100.
+See docs/ANDROID_WIDGET.md for HA-native PTZ scripts and a phone dashboard.

@@ -1,0 +1,10 @@
+# Use as content of "rest_command: !include ha-examples/ubox_android_rest_command.yaml"
+# Replace 192.168.1.40 with the local LAN IP of your HA host.
+ubox_move:
+  url: "http://192.168.1.40:8100/ptz"
+  method: POST
+  headers:
+    X-UBox-Token: !secret ubox_lan_token
+  content_type: "application/json"
+  payload: '{"direction": "{{ direction }}"}'
+  timeout: 12
