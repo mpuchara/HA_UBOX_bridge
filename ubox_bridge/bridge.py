@@ -45,6 +45,7 @@ class CameraState:
         self.cyd_image = DATA / "last_cyd.jpg"
         self.cyd_wide_image = DATA / "last_cyd_wide.jpg"
         self.lock = threading.Lock()
+        self.framing_lock = threading.Lock()
         self.busy = False
         self.ptz_running = False
         self.last_ptz_command = None
@@ -83,6 +84,19 @@ class CameraState:
         except (OSError, ValueError) as exc:
             LOG.warning("Cannot load options: %s", exc)
             self.options = {}
+        # UI framing choice survives add-on restarts and can override old
+        # Home Assistant addon options without writing Supervisor config.
+        self.framing_override = DATA / "framing.json"
+        try:
+            overrides = json.loads(self.framing_override.read_text(encoding="utf-8"))
+            fit = overrides["cyd_fit_mode"]
+            focus = overrides["cyd_focus_x"]
+            if fit not in ("blur", "cover", "contain") or type(focus) is not int or not 0 <= focus <= 100:
+                raise ValueError("Invalid stored framing")
+            self.options["cyd_fit_mode"] = fit
+            self.options["cyd_focus_x"] = focus
+        except (FileNotFoundError, KeyError, ValueError, TypeError, OSError):
+            pass
         # Token is created locally on the HA host; not stored in Git or logged.
         token_file = DATA / "snapshot_token"
         if not token_file.is_file():
@@ -474,14 +488,15 @@ class CameraState:
             with self.lock:
                 self.busy = False
 
-    def rebuild_cyd_wide_from_cache(self):
+    def rebuild_cyd_wide_from_cache(self, mode=None, focus=None):
         """Reframe cached HA JPEG on startup without waking the LTE camera."""
         if not self.image.is_file() or not self.image.stat().st_size:
             return False
         with tempfile.TemporaryDirectory(prefix="reframe-", dir=DATA) as folder:
             target = Path(folder) / "wide.jpg"
-            vf = cyd_wide_filter(self.options.get("cyd_fit_mode", "blur"),
-                                 self.options.get("cyd_focus_x", 50))
+            vf = cyd_wide_filter(
+                mode if mode is not None else self.options.get("cyd_fit_mode", "blur"),
+                focus if focus is not None else self.options.get("cyd_focus_x", 50))
             result = subprocess.run(
                 [FFMPEG, "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
                  "-i", str(self.image), "-vf", vf, "-frames:v", "1",
@@ -494,6 +509,44 @@ class CameraState:
         LOG.info("Reframed CYD JPEG from HA cache without LTE wake-up")
         return True
 
+    def set_framing(self, mode, focus) -> tuple[int, str]:
+        """Choose the on-screen framing immediately, without waking UBox.
+
+        Only authenticated HA Ingress can call this. A lock serializes local
+        FFmpeg conversion with itself; busy keeps PTZ/capture from racing.
+        """
+        if not isinstance(mode, str) or mode not in ("blur", "cover", "contain"):
+            return 400, "Nieprawidłowy tryb. Wybierz blur, cover lub contain."
+        if type(focus) is not int or not 0 <= focus <= 100:
+            return 400, "Pozycja kadru musi być liczbą całkowitą 0–100."
+        if not self.framing_lock.acquire(blocking=False):
+            return 409, "Trwa już zmiana kadru."
+        try:
+            with self.lock:
+                if self.busy or self.ptz_running:
+                    return 409, "Trwa sterowanie lub pobieranie nowego zdjęcia."
+                # Reserve the capture lock until output is atomically published.
+                self.busy = True
+            try:
+                self.rebuild_cyd_wide_from_cache(mode, focus)
+                tmp = DATA / "framing.new"
+                tmp.write_text(json.dumps({
+                    "cyd_fit_mode": mode, "cyd_focus_x": focus
+                }), encoding="utf-8")
+                os.replace(tmp, self.framing_override)
+                with self.lock:
+                    self.options["cyd_fit_mode"] = mode
+                    self.options["cyd_focus_x"] = focus
+                LOG.info("CYD framing updated: %s, focus=%d", mode, focus)
+                return 200, "Kadr zapisany. CYD otrzyma nowy obraz bez połączenia LTE."
+            except (RuntimeError, OSError, ValueError, subprocess.TimeoutExpired):
+                return 503, "Nie udało się przygotować kadru z ostatniego zdjęcia HA."
+            finally:
+                with self.lock:
+                    self.busy = False
+        finally:
+            self.framing_lock.release()
+
     def fail(self, message: str):
         with self.lock:
             self.last_error = message
@@ -504,7 +557,7 @@ STATE: CameraState | None = None
 
 
 class ApiHandler(BaseHTTPRequestHandler):
-    server_version = "UBoxBridge/0.5.11"
+    server_version = "UBoxBridge/0.5.12"
 
     def log_message(self, fmt, *args):
         # Never log URLs or query strings containing the snapshot token.
@@ -643,6 +696,22 @@ class ApiHandler(BaseHTTPRequestHandler):
             return
         if not self.allowed_ingress():
             self.respond(403, b"Forbidden", "text/plain")
+            return
+        if route == "/framing":
+            length = self.headers.get("Content-Length", "")
+            if not length.isdecimal() or not (1 <= int(length) <= 120):
+                self.respond(400, b"Invalid framing payload size", "text/plain")
+                return
+            try:
+                choice = json.loads(self.rfile.read(int(length)))
+            except (ValueError, UnicodeDecodeError):
+                self.respond(400, b"Invalid framing JSON", "text/plain")
+                return
+            if not isinstance(choice, dict) or set(choice) != {"mode", "focus"}:
+                self.respond(400, b"Invalid framing fields", "text/plain")
+                return
+            code, message = STATE.set_framing(choice["mode"], choice["focus"])
+            self.json_response(code, {"accepted": code == 200, "message": message})
             return
         if route == "/ptz":
             size_text = self.headers.get("Content-Length", "")

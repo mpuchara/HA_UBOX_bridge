@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.12 — mobile-first camera panel, visual framing and Android widgets
+
+- Dashboard opens with one large **CYD 320×240 photo**; duplicate HA-native and older portrait previews removed from the page (endpoints retained).
+- PTZ arrows now appear directly beneath that image, followed by manual refresh, visual fit selector and optional horizontal focus slider.
+- Ingress-only POST /framing accepts enum blur / cover / contain plus focus 0–100. It rebuilds the JPEG from the saved native HA image without waking 4G, persists choice across restarts, and updates the CYD instantly via new ETag. LAN port 8100 never exposes framing writes.
+- Home Assistant add-on configuration also uses dropdown list(blur|cover|contain) rather than free text; panel selections are persisted in /data/framing.json and take precedence over older addon settings.
+- Add a ready-to-customize configuration and docs for Home Assistant Generic Camera (Android Picture widget), REST-command PTZ actions, phone dashboard and optional launcher shortcut. HA proxies snapshots, no Internet port forwarding.
+- No ESP32 firmware changes; CYD v0.2.6 remains compatible. Android Picture widget is a snapshot and does not include directional arrows.
+
 ## 0.5.11 — fix incorrect PTZ motion and overshoot
 
 - Fix 12-byte PTZ IOCTRL 0x1001: **byte[2]=speed**, **byte[5]=direction**, other bytes zero; previous upstream library used byte[6]=8 and byte[10]=speed. Independent empirically verified protocol reference: [mahumadad/ubox-p4p IOCTRLS.md](https://github.com/mahumadad/ubox-p4p/blob/main/docs/IOCTRLS.md).
