@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.13 — ambient light calibration for CYD 0.2.7
+
+- Calibration UI for real-time CYD GPIO34 ADC readings and two night/day anchors, each with chosen PWM brightness (5–100%).
+- Preview chosen brightness for 30 seconds before saving. Save both anchor readings after the enclosure is installed; linear interpolation works with inverted or standard LDR dividers.
+- Add authenticated LAN brightness telemetry and GET config endpoints, while Ingress-only writes persist calibration in /data/brightness.json (no P4P/LTE traffic).
+- Existing camera image, PTZ and Android widget unchanged. Requires CYD firmware 0.2.7 to report light readings and control GPIO21 via PWM.
+
 > **Archiwum historyczne:** poniższe wpisy opisują zachowanie swoich wersji, także dawno zastąpione rozwiązania. Aktualne instrukcje instalacji, PTZ, kadrowania i Androida są w [README](../README.md) i katalogu [docs](../docs/). Zmiany dokumentacji na gałęzi `main` nie zmieniają funkcjonalnej wersji 0.5.12.
 
 ## 0.5.12 — mobile-first camera panel, visual framing and Android widgets

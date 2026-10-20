@@ -11,6 +11,7 @@ from cloud_api import UBoxApiError, discover_devices
 from frame_quality import select_cleanest
 from image_filters import landscape_filter, cyd_wide_filter
 from video_profiles import video_profile
+from brightness import calibrated, valid_anchor, SAMPLE_MIN_SPAN
 import json
 import logging
 import os
@@ -46,6 +47,21 @@ class CameraState:
         self.cyd_wide_image = DATA / "last_cyd_wide.jpg"
         self.lock = threading.Lock()
         self.framing_lock = threading.Lock()
+        self.brightness_path = DATA / "brightness.json"
+        self.brightness_points = {"night": None, "day": None}
+        self.ldr_raw = None
+        self.ldr_pwm = None
+        self.ldr_seen = None
+        self.brightness_preview = None
+        self.brightness_preview_until = 0.0
+        try:
+            saved = json.loads(self.brightness_path.read_text(encoding="utf-8"))
+            if isinstance(saved, dict):
+                for anchor in ("night", "day"):
+                    if valid_anchor(saved.get(anchor)):
+                        self.brightness_points[anchor] = saved[anchor]
+        except (OSError, ValueError, TypeError):
+            pass
         self.busy = False
         self.ptz_running = False
         self.last_ptz_command = None
@@ -203,6 +219,15 @@ class CameraState:
                 "ptz_running": self.ptz_running,
                 "ptz_pulse_ms": int(self.options.get("ptz_pulse_ms", 100)),
                 "ptz_speed": int(self.options.get("ptz_speed", 1)),
+                "brightness": {
+                    "night": self.brightness_points["night"],
+                    "day": self.brightness_points["day"],
+                    "calibrated": calibrated(self.brightness_points),
+                    "raw": self.ldr_raw,
+                    "actual_percent": self.ldr_pwm,
+                    "age_seconds": None if self.ldr_seen is None else round(time.monotonic()-self.ldr_seen, 1),
+                    "preview_percent": self.brightness_preview if time.monotonic() < self.brightness_preview_until else None,
+                },
                 "last_ptz_command": self.last_ptz_command,
                 "last_ptz_error": self.last_ptz_error,
                 "detecting": self.detecting,
@@ -509,6 +534,87 @@ class CameraState:
         LOG.info("Reframed CYD JPEG from HA cache without LTE wake-up")
         return True
 
+    def brightness_status(self) -> dict:
+        with self.lock:
+            age = None if self.ldr_seen is None else round(time.monotonic()-self.ldr_seen, 1)
+            return {
+                "night": self.brightness_points["night"],
+                "day": self.brightness_points["day"],
+                "calibrated": calibrated(self.brightness_points),
+                "raw": self.ldr_raw,
+                "actual_percent": self.ldr_pwm,
+                "age_seconds": age,
+                "preview_percent": self.brightness_preview if time.monotonic() < self.brightness_preview_until else None,
+            }
+
+    def brightness_config(self) -> dict:
+        with self.lock:
+            remaining = max(0, min(30000,
+                int((self.brightness_preview_until-time.monotonic())*1000)))
+            return {
+                "night": self.brightness_points["night"],
+                "day": self.brightness_points["day"],
+                "calibrated": calibrated(self.brightness_points),
+                "preview_percent": self.brightness_preview if remaining else None,
+                "preview_ms": remaining,
+            }
+
+    def brightness_telemetry(self, payload) -> tuple[int, str]:
+        if not isinstance(payload, dict) or set(payload) != {"raw", "percent"}:
+            return 400, "Invalid telemetry"
+        raw, percent = payload["raw"], payload["percent"]
+        if type(raw) is not int or not 0 <= raw <= 4095 or type(percent) is not int or not 0 <= percent <= 100:
+            return 400, "Invalid ADC or brightness reading"
+        with self.lock:
+            self.ldr_raw = raw
+            self.ldr_pwm = percent
+            self.ldr_seen = time.monotonic()
+        return 200, "OK"
+
+    def brightness_preview_at(self, percent) -> tuple[int, str]:
+        if type(percent) is not int or not 5 <= percent <= 100:
+            return 400, "Jasność musi wynosić od 5 do 100%."
+        with self.lock:
+            self.brightness_preview = percent
+            self.brightness_preview_until = time.monotonic()+30
+        return 200, "Jasność próbna będzie aktywna przez około 30 sekund."
+
+    def brightness_calibrate(self, anchor, percent) -> tuple[int, str]:
+        if anchor not in ("night", "day") or type(percent) is not int or not 5 <= percent <= 100:
+            return 400, "Wybierz Noc/Dzień oraz jasność 5–100%."
+        with self.lock:
+            if self.ldr_raw is None or self.ldr_seen is None or time.monotonic()-self.ldr_seen > 35:
+                return 409, "Brak aktualnego pomiaru LDR. Sprawdź połączenie CYD."
+            raw = self.ldr_raw
+            other = self.brightness_points["day" if anchor == "night" else "night"]
+            if valid_anchor(other) and abs(raw-other["raw"]) < SAMPLE_MIN_SPAN:
+                return 409, "Oświetlenie jest zbyt podobne do drugiego punktu. Skalibruj go w innych warunkach."
+            points = dict(self.brightness_points)
+            points[anchor] = {"raw": raw, "percent": percent}
+            try:
+                tmp = self.brightness_path.with_suffix(".new")
+                tmp.write_text(json.dumps(points), encoding="utf-8")
+                os.replace(tmp, self.brightness_path)
+            except OSError:
+                return 503, "Nie udało się zapisać kalibracji."
+            self.brightness_points = points
+            self.brightness_preview = None
+            self.brightness_preview_until = 0
+        LOG.info("CYD brightness %s point recorded at ADC=%s, PWM=%s%%", anchor, raw, percent)
+        return 200, ("Zapisano punkt. Tryb AUTO jest aktywny."
+                     if calibrated(points) else "Zapisano pierwszy punkt. Dodaj drugi w odmiennym oświetleniu.")
+
+    def brightness_reset(self) -> tuple[int, str]:
+        with self.lock:
+            try:
+                self.brightness_path.unlink(missing_ok=True)
+            except OSError:
+                return 503, "Nie udało się usunąć kalibracji."
+            self.brightness_points = {"night": None, "day": None}
+            self.brightness_preview = None
+            self.brightness_preview_until = 0
+        return 200, "Kalibracja wyczyszczona. Do czasu ponownej kalibracji jasność wyniesie 100%."
+
     def set_framing(self, mode, focus) -> tuple[int, str]:
         """Choose the on-screen framing immediately, without waking UBox.
 
@@ -557,7 +663,7 @@ STATE: CameraState | None = None
 
 
 class ApiHandler(BaseHTTPRequestHandler):
-    server_version = "UBoxBridge/0.5.12"
+    server_version = "UBoxBridge/0.5.13"
 
     def log_message(self, fmt, *args):
         # Never log URLs or query strings containing the snapshot token.
@@ -608,6 +714,11 @@ class ApiHandler(BaseHTTPRequestHandler):
             return
         if route == "/health":
             self.json_response(200, {"ok": True})
+        elif route == "/brightness-config.json":
+            if not self.valid_token():
+                self.respond(401, b"Token required", "text/plain")
+                return
+            self.json_response(200, STATE.brightness_config())
         elif route in ("/snapshot.jpg", "/snapshot-cyd.jpg", "/snapshot-cyd-wide.jpg", "/snapshot-meta.json"):
             if not self.valid_token():
                 self.respond(401, b"Token required", "text/plain")
@@ -694,8 +805,48 @@ class ApiHandler(BaseHTTPRequestHandler):
             code, message = STATE.trigger_ptz(payload["direction"])
             self.json_response(code, {"accepted": code == 202, "message": message})
             return
+        if self.server.server_port == SNAPSHOT_PORT and route == "/brightness-telemetry":
+            if not hmac.compare_digest(self.headers.get("X-UBox-Token", ""), STATE.token):
+                self.respond(401, b"Token required", "text/plain")
+                return
+            size = self.headers.get("Content-Length", "")
+            if not size.isdecimal() or not 1 <= int(size) <= 96:
+                self.respond(400, b"Invalid body size", "text/plain")
+                return
+            try:
+                payload = json.loads(self.rfile.read(int(size)))
+            except (ValueError, UnicodeDecodeError):
+                self.respond(400, b"Invalid telemetry", "text/plain")
+                return
+            code, message = STATE.brightness_telemetry(payload)
+            self.json_response(code, {"message": message})
+            return
         if not self.allowed_ingress():
             self.respond(403, b"Forbidden", "text/plain")
+            return
+        if route in ("/brightness-preview", "/brightness-calibrate", "/brightness-reset"):
+            if route == "/brightness-reset":
+                code, message = STATE.brightness_reset()
+            else:
+                size = self.headers.get("Content-Length", "")
+                if not size.isdecimal() or not 1 <= int(size) <= 120:
+                    self.respond(400, b"Invalid body size", "text/plain")
+                    return
+                try:
+                    payload = json.loads(self.rfile.read(int(size)))
+                except (ValueError, UnicodeDecodeError):
+                    self.respond(400, b"Invalid JSON", "text/plain")
+                    return
+                if not isinstance(payload, dict):
+                    self.respond(400, b"Invalid JSON object", "text/plain")
+                    return
+                if route == "/brightness-preview" and set(payload) == {"percent"}:
+                    code, message = STATE.brightness_preview_at(payload["percent"])
+                elif route == "/brightness-calibrate" and set(payload) == {"anchor", "percent"}:
+                    code, message = STATE.brightness_calibrate(payload["anchor"], payload["percent"])
+                else:
+                    code, message = 400, "Invalid request"
+            self.json_response(code, {"accepted": code == 200, "message": message})
             return
         if route == "/framing":
             length = self.headers.get("Content-Length", "")
