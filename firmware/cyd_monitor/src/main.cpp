@@ -8,6 +8,7 @@
 #include <TJpg_Decoder.h>
 #include <SPI.h>
 #include <XPT2046_Touchscreen.h>
+#include <ArduinoJson.h>
 #include <math.h>
 #include <esp_system.h>
 #include <memory>
@@ -16,9 +17,13 @@
 // CYD ESP32-2432S028 (ILI9341, 2.8", landscape 320x240).
 // Configuration is stored in ESP32 NVS, NEVER compiled into the firmware.
 static constexpr int TFT_BACKLIGHT_PIN = 21;
+static constexpr int LDR_ADC_PIN = 34;
+static constexpr int BACKLIGHT_PWM_CHANNEL = 0;
 static constexpr int BOOT_BUTTON_PIN = 0;
 static constexpr unsigned long REFRESH_MS = 30000UL;
 static constexpr unsigned long PTZ_POLL_MS=2500UL;
+static constexpr unsigned long LDR_SAMPLE_MS=2500UL;
+static constexpr unsigned long BRIGHTNESS_SYNC_MS=10000UL;
 static constexpr unsigned long PTZ_REFRESH_TIMEOUT_MS=110000UL;
 static constexpr size_t MAX_JPEG_BYTES = 100 * 1024;
 static constexpr uint8_t DEFAULT_SCREEN_ROTATION = 3; // LCD upright with USB lower-right when board is turned clockwise
@@ -40,6 +45,17 @@ float tA=0,tB=0,tC=0,tD=0,tE=0,tF=0;
 uint8_t touchCalRotation=DEFAULT_SCREEN_ROTATION;
 int16_t dragStartX=0,dragStartY=0,dragCurrentX=0,dragCurrentY=0;
 unsigned long dragStartMs=0,gestureNextAllowed=0,ptzImageDeadline=0;
+// The board may have an inverted LDR divider. No polarity assumption:
+// interpolate between measured night/day ADC anchors, saved by HA panel.
+struct BrightnessAnchor { int raw=-1; int percent=100; };
+BrightnessAnchor lightNight, lightDay;
+bool brightnessCalibrated=false;
+float filteredLdr=0.0f;
+bool ldrValid=false;
+float currentBrightness=100.0f;
+int previewPercent=-1;
+unsigned long previewUntil=0, lastLightSample=0, lastBrightnessSync=0, lastBrightnessTelemetry=0;
+
 
 
 // HA add-on v0.5.5+ provides landscape 320x240 JPEG, orientation
@@ -431,11 +447,136 @@ void checkTouch(){
   }
 }
 
+bool brightnessAnchorsValid() {
+  return lightNight.raw>=0&&lightNight.raw<=4095&&
+      lightDay.raw>=0&&lightDay.raw<=4095&&
+      abs(lightDay.raw-lightNight.raw)>=120 &&
+      lightNight.percent>=5&&lightNight.percent<=100&&
+      lightDay.percent>=5&&lightDay.percent<=100;
+}
+void loadBrightnessNVS(){
+  Preferences prefs;
+  if(!prefs.begin("ubox-cyd",true))return;
+  if(prefs.getBool("br_ok",false)){
+    lightNight.raw=prefs.getInt("br_nraw",-1);
+    lightNight.percent=prefs.getInt("br_npct",100);
+    lightDay.raw=prefs.getInt("br_draw",-1);
+    lightDay.percent=prefs.getInt("br_dpct",100);
+  }
+  prefs.end();
+  brightnessCalibrated=brightnessAnchorsValid();
+}
+void saveBrightnessNVS(){
+  Preferences prefs;
+  if(!prefs.begin("ubox-cyd",false))return;
+  prefs.putBool("br_ok",brightnessCalibrated);
+  if(brightnessCalibrated){
+    prefs.putInt("br_nraw",lightNight.raw);
+    prefs.putInt("br_npct",lightNight.percent);
+    prefs.putInt("br_draw",lightDay.raw);
+    prefs.putInt("br_dpct",lightDay.percent);
+  }
+  prefs.end();
+}
+float brightnessTarget(){
+  if(previewPercent>=5&&static_cast<int32_t>(previewUntil-millis())>0)
+    return float(previewPercent);
+  previewPercent=-1;
+  if(!brightnessCalibrated||!ldrValid)return 100.0f;
+  const float ratio=constrain((filteredLdr-lightNight.raw)/
+      float(lightDay.raw-lightNight.raw),0.0f,1.0f);
+  return constrain(lightNight.percent+ratio*(lightDay.percent-lightNight.percent),
+                   5.0f,100.0f);
+}
+void updateBrightness(){
+  const unsigned long now=millis();
+  if(!ldrValid||now-lastLightSample>=LDR_SAMPLE_MS){
+    lastLightSample=now;
+    uint32_t sum=0;
+    for(int i=0;i<8;++i)sum+=analogRead(LDR_ADC_PIN);
+    float avg=sum/8.0f;
+    if(!ldrValid){filteredLdr=avg;ldrValid=true;}
+    else filteredLdr=filteredLdr*0.72f+avg*0.28f;
+  }
+  const float desired=brightnessTarget();
+  const float delta=constrain(desired-currentBrightness,-0.6f,0.6f);
+  currentBrightness=constrain(currentBrightness+delta,5.0f,100.0f);
+  const int duty=constrain(int(roundf(currentBrightness*255.0f/100.0f)),13,255);
+  ledcWrite(BACKLIGHT_PWM_CHANNEL,duty);
+}
+void getBrightnessConfig(){
+  if(WiFi.status()!=WL_CONNECTED||haHost.isEmpty()||snapshotToken.isEmpty())return;
+  WiFiClient client;
+  HTTPClient http;
+  if(!http.begin(client,"http://"+haHost+":8100/brightness-config.json"))return;
+  http.setReuse(false);http.setTimeout(2200);
+  http.addHeader("X-UBox-Token",snapshotToken);
+  int code=http.GET();
+  if(code==HTTP_CODE_OK){
+    StaticJsonDocument<384> doc;
+    if(!deserializeJson(doc,http.getStream())){
+      auto night=doc["night"];
+      auto day=doc["day"];
+      const bool valid=night.is<JsonObject>()&&day.is<JsonObject>()&&
+         night["raw"].is<int>()&&night["percent"].is<int>()&&
+         day["raw"].is<int>()&&day["percent"].is<int>();
+      const int nRaw=valid?night["raw"].as<int>():-1;
+      const int dRaw=valid?day["raw"].as<int>():-1;
+      const int nPercent=valid?night["percent"].as<int>():100;
+      const int dPercent=valid?day["percent"].as<int>():100;
+      const bool newValid=valid&&nRaw>=0&&nRaw<=4095&&dRaw>=0&&dRaw<=4095&&
+          abs(nRaw-dRaw)>=120&&nPercent>=5&&nPercent<=100&&
+          dPercent>=5&&dPercent<=100;
+      if(newValid){
+        if(!brightnessCalibrated||lightNight.raw!=nRaw||lightDay.raw!=dRaw||
+           lightNight.percent!=nPercent||lightDay.percent!=dPercent){
+          lightNight.raw=nRaw;lightDay.raw=dRaw;
+          lightNight.percent=nPercent;lightDay.percent=dPercent;
+          brightnessCalibrated=true;
+          saveBrightnessNVS();
+        }
+      }else if(brightnessCalibrated){
+        brightnessCalibrated=false;
+        saveBrightnessNVS();
+      }
+      const int preview=doc["preview_percent"]|0;
+      const int ms=doc["preview_ms"]|0;
+      if(preview>=5&&preview<=100&&ms>0&&ms<=30000){
+        previewPercent=preview;
+        previewUntil=millis()+unsigned(ms);
+      }else{
+        previewPercent=-1;
+      }
+    }
+  }
+  http.end();
+}
+void postBrightnessTelemetry(){
+  if(!ldrValid||WiFi.status()!=WL_CONNECTED||haHost.isEmpty()||snapshotToken.isEmpty())return;
+  WiFiClient client;
+  HTTPClient http;
+  if(!http.begin(client,"http://"+haHost+":8100/brightness-telemetry"))return;
+  http.setReuse(false);http.setTimeout(2200);
+  http.addHeader("X-UBox-Token",snapshotToken);
+  http.addHeader("Content-Type","application/json");
+  const int raw=constrain(int(roundf(filteredLdr)),0,4095);
+  const int percent=constrain(int(roundf(currentBrightness)),5,100);
+  String data=String("{\"raw\":")+raw+",\"percent\":"+percent+"}";
+  const int code=http.POST(data);
+  if(code!=HTTP_CODE_OK)Serial.printf("Brightness telemetry: HTTP %d\n",code);
+  http.end();
+}
+
 void setup() {
   Serial.begin(115200);
   pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
-  pinMode(TFT_BACKLIGHT_PIN, OUTPUT);
-  digitalWrite(TFT_BACKLIGHT_PIN, HIGH);
+  ledcSetup(BACKLIGHT_PWM_CHANNEL,5000,8);
+  ledcAttachPin(TFT_BACKLIGHT_PIN,BACKLIGHT_PWM_CHANNEL);
+  ledcWrite(BACKLIGHT_PWM_CHANNEL,255);
+  pinMode(LDR_ADC_PIN,INPUT);
+  analogReadResolution(12);
+  analogSetPinAttenuation(LDR_ADC_PIN,ADC_11db);
+  loadBrightnessNVS();
   // Load the saved orientation BEFORE drawing anything so the setup
   // menu, Wi-Fi progress and camera image are ALWAYS in one orientation.
   loadSettings();
@@ -488,6 +629,18 @@ void loop() {
     }
   }
   checkTouch();
+  updateBrightness();
+  if(WiFi.status()==WL_CONNECTED && !haHost.isEmpty() && !snapshotToken.isEmpty()){
+    const unsigned long now=millis();
+    if(lastBrightnessSync==0||now-lastBrightnessSync>=BRIGHTNESS_SYNC_MS){
+      lastBrightnessSync=now;
+      getBrightnessConfig();
+    }
+    if(lastBrightnessTelemetry==0||now-lastBrightnessTelemetry>=BRIGHTNESS_SYNC_MS){
+      lastBrightnessTelemetry=now;
+      postBrightnessTelemetry();
+    }
+  }
   if(waitingForPtzImage&&static_cast<int32_t>(millis()-ptzImageDeadline)>=0){
     waitingForPtzImage=false;
     ptzBanner("PTZ: brak nowego zdjecia",TFT_YELLOW);
