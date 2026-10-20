@@ -34,13 +34,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p site/firmware
-          cp web-installer/index.html web-installer/manifest.json web-installer/manifest-ili9341.json site/
+          cp web-installer/index.html web-installer/manifest.json web-installer/manifest-st7789-gpio21.json web-installer/manifest-ili9341.json site/
           touch site/.nojekyll
           BOOT_APP0=$(find "$HOME/.platformio/packages/framework-arduinoespressif32" -name boot_app0.bin -print -quit)
           test -n "$BOOT_APP0" && test -s "$BOOT_APP0"
-          for ENV in esp32-2432s028 esp32-2432s028-ili9341; do
+          for ENV in esp32-2432s028 esp32-2432s028-st7789-gpio21 esp32-2432s028-ili9341; do
             case "$ENV" in
               esp32-2432s028) NAME=ubox-cyd-esp32.bin ;;
+              esp32-2432s028-st7789-gpio21) NAME=ubox-cyd-st7789-gpio21.bin ;;
               *) NAME=ubox-cyd-ili9341.bin ;;
             esac
             BUILD="firmware/cyd_monitor/.pio/build/$ENV"
@@ -59,7 +60,7 @@ jobs:
           import json
           from pathlib import Path
           site = Path("site")
-          for manifest_path in ("manifest.json", "manifest-ili9341.json"):
+          for manifest_path in ("manifest.json", "manifest-st7789-gpio21.json", "manifest-ili9341.json"):
               manifest = json.loads((site / manifest_path).read_text())
               assert manifest["builds"][0]["chipFamily"] == "ESP32"
               for part in manifest["builds"][0]["parts"]:
@@ -67,7 +68,7 @@ jobs:
                   assert path.exists() and path.stat().st_size > 65536, path
           print("Browser installer firmware validated.")
           PY
-          sha256sum site/firmware/ubox-cyd-esp32.bin site/firmware/ubox-cyd-ili9341.bin > site/firmware/SHA256SUMS.txt
+          sha256sum site/firmware/ubox-cyd-esp32.bin site/firmware/ubox-cyd-st7789-gpio21.bin site/firmware/ubox-cyd-ili9341.bin > site/firmware/SHA256SUMS.txt
       - name: Upload browser flasher files
         uses: actions/upload-artifact@v4
         with:
@@ -90,6 +91,7 @@ jobs:
         run: |
           set -euo pipefail
           test -s site/firmware/ubox-cyd-esp32.bin
+          test -s site/firmware/ubox-cyd-st7789-gpio21.bin
           test -s site/firmware/ubox-cyd-ili9341.bin
           cp windows-installer/Start-Installer.cmd windows-installer/Install-CYD.ps1 windows-installer/README.md site/
           sha256sum -c site/firmware/SHA256SUMS.txt
@@ -108,7 +110,7 @@ jobs:
           TAG="cyd-v${VERSION}-${SHORT_SHA}"
           gh release create "$TAG" UBox-CYD-Windows-Browser-Installer.zip \
             --target "$GITHUB_SHA" --title "CYD Browser Installer $VERSION ($SHORT_SHA)" \
-            --notes "Windows portable browser installer (Edge/Chrome). Contains both ST7789 (try first on a two-USB CYD) and ILI9341 builds. Unzip and launch Start-Installer.cmd. Binaries verified in CI." \
+            --notes "Windows portable browser installer (Edge/Chrome). Contains ST7789 GPIO27, ST7789 GPIO21, and ILI9341 GPIO21 builds. Unzip and launch Start-Installer.cmd. Binaries verified in CI." \
             --latest=false --prerelease
   deploy:
     environment:

@@ -23,28 +23,33 @@
 <main>
   <div class="tag">Home Assistant · XEGA 4G · ESP32-2432S028</div>
   <h1>UBox CYD — instalator</h1>
-  <p class="subtitle">Firmware <strong>0.2.7</strong> · zgodny z UBox Bridge <strong>0.5.13</strong> · ekran 320×240, gesty PTZ i automatyczna jasność po kalibracji. Nie potrzebujesz VS Code ani PlatformIO.</p>
+  <p class="subtitle">Firmware <strong>0.2.8</strong> · zgodny z UBox Bridge <strong>0.5.13</strong> · ekran 320×240, gesty PTZ i automatyczna jasność po kalibracji. Nie potrzebujesz VS Code ani PlatformIO.</p>
   <p><a href="https://github.com/mpuchara/HA_UBOX_bridge/blob/main/docs/CYD_WEB_INSTALL.md">Pełna instrukcja instalacji CYD</a> · <a href="https://github.com/mpuchara/HA_UBOX_bridge/blob/main/docs/TROUBLESHOOTING.md">Rozwiązywanie problemów</a></p>
   <section class="panel">
     <h2>1. Wybierz właściwy sterownik ekranu</h2>
-    <p>Dla klasycznej płytki <b>ESP32-2432S028 z dwoma USB</b> najpierw wypróbuj <b>ST7789</b>. Jeśli pola testowe lub JPEG wyświetlają się niepoprawnie, sprawdź <b>ILI9341</b>. Nie instaluj na ESP32-S3/P4 ani innych niezgodnych płytkach.</p>
+    <p>Dwie płytki CYD z USB-C + micro-USB mogą mieć <b>różne piny podświetlenia</b>. <b>Czarny ekran przed połączeniem z HA</b> zwykle oznacza nieodpowiedni profil BL lub LCD — nie kalibrację HA. Wypróbuj <b>ST7789 / GPIO27</b>, następnie <b>ST7789 / GPIO21</b> lub <b>ILI9341 / GPIO21</b>. Nie instaluj na ESP32-S3/P4 ani innych niezgodnych płytkach.</p>
     <ol>
       <li>Podłącz CYD przez USB do komputera.</li>
       <li>Otwórz stronę w <b>Chrome lub Edge na Windows</b> i kliknij „Połącz / Zainstaluj”.</li>
       <li>Wybierz port płytki (np. <b>COM4</b>, ale numer może być inny) i zaakceptuj instalację.</li>
       <li>Poczekaj na zakończenie wgrywania. Nie odłączaj urządzenia podczas flashowania.</li>
     </ol>
-    <h3>Opcja A — ST7789 (zalecana dla płytki z 2 USB)</h3>
+    <h3>Opcja A — ST7789 / BL GPIO27 (dwuportowa Rv3)</h3>
     <esp-web-install-button manifest="./manifest.json">
       <span slot="unsupported">Instalacja przez USB wymaga Chrome lub Edge na komputerze z obsługą Web Serial, na stronie HTTPS.</span>
       <span slot="not-allowed">Dostęp do portu szeregowego został zablokowany przez przeglądarkę.</span>
     </esp-web-install-button>
-    <h3>Opcja B — ILI9341 (awaryjna, jeśli ST7789 nie działa poprawnie)</h3>
+    <h3>Opcja B — ST7789 / BL GPIO21 (alternatywa)</h3>
+    <esp-web-install-button manifest="./manifest-st7789-gpio21.json">
+      <span slot="unsupported">Wymaga Chrome lub Edge z Web Serial.</span>
+      <span slot="not-allowed">Brak dostępu do portu szeregowego.</span>
+    </esp-web-install-button>
+    <h3>Opcja C — ILI9341 / BL GPIO21</h3>
     <esp-web-install-button manifest="./manifest-ili9341.json">
       <span slot="unsupported">Wymaga Chrome lub Edge z Web Serial.</span>
       <span slot="not-allowed">Brak dostępu do portu szeregowego.</span>
     </esp-web-install-button>
-    <p class="muted"><small>Najpierw sprawdź ekrany testowe 4 kolorów. Całe 320×240 powinno się wypełniać bez pozostałości poprzednich pikseli. Przy pierwszej instalacji zawartość flash ESP32 może zostać wyczyszczona.</small></p>
+    <p class="muted"><small>Przed pierwszą poprawną synchronizacją HA firmware utrzymuje 100% jasności. Najpierw sprawdź ekrany testowe 4 kolorów. Całe 320×240 powinno się wypełniać bez pozostałości poprzednich pikseli. Przy pierwszej instalacji zawartość flash ESP32 może zostać wyczyszczona.</small></p>
   </section>
   <section class="panel">
     <h2>2. Skonfiguruj przez Wi-Fi</h2>
