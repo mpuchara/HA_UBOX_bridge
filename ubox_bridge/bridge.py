@@ -929,6 +929,11 @@ label{display:block;font-weight:650;margin:3px 0 6px}
 select{width:100%;background:#101d2d;color:white;padding:8px}
 #focusrow{margin-top:12px}
 #focus{width:100%;accent-color:#47b8ea}
+.lightpoint{padding:10px 0;border-top:1px solid #344256}
+.lightpoint input{width:100%;accent-color:#47b8ea}
+.lightpoint .actions{margin:10px 0}
+#ldrreadout{font-variant-numeric:tabular-nums;font-size:1rem}
+#brightnessInfo{color:#a2f1c0}
 a{color:#76d3ff}
 code,pre{color:#b9f2b2;overflow-wrap:anywhere;white-space:pre-wrap}
 details{margin-top:8px}
@@ -973,6 +978,30 @@ pre{max-height:260px;overflow:auto;font-size:12px}
   <p class="muted" id="fitstatus" role="status">Zmiana kadru nie budzi kamery LTE.</p>
 </article>
 <article>
+  <h2>☀️ Automatyczna jasność CYD</h2>
+  <p id="ldrreadout" role="status">Czekam na pomiar LDR z ESP32…</p>
+  <p class="muted">Kalibruj <b>po włożeniu płytki do obudowy</b>. Wybierz jasność, kliknij
+  <b>Wypróbuj</b>, a następnie zapisz aktualny odczyt fotorezystora
+  jako „Noc” lub „Dzień”. Dwa punkty w różnych warunkach wystarczą:
+  między nimi jasność zmienia się płynnie, bez harmonogramu zachodów słońca.</p>
+  <div class="lightpoint">
+    <label for="nightPercent">🌙 Noc — jasność <output id="nightValue">12%</output></label>
+    <input id="nightPercent" type="range" min="5" max="100" step="1" value="12">
+    <p class="muted" id="nightSaved">Nie skalibrowano</p>
+    <div class="actions"><button id="nightTest">Wypróbuj na 30 s</button>
+    <button id="nightSave" class="primary">Zapisz noc przy obecnym pomiarze</button></div>
+  </div>
+  <div class="lightpoint">
+    <label for="dayPercent">☀️ Dzień — jasność <output id="dayValue">90%</output></label>
+    <input id="dayPercent" type="range" min="5" max="100" step="1" value="90">
+    <p class="muted" id="daySaved">Nie skalibrowano</p>
+    <div class="actions"><button id="dayTest">Wypróbuj na 30 s</button>
+    <button id="daySave" class="primary">Zapisz dzień przy obecnym pomiarze</button></div>
+  </div>
+  <p id="brightnessInfo" aria-live="polite">Do czasu zapisania obu punktów ekran pozostaje na 100%.</p>
+  <button id="brightnessReset">Usuń kalibrację jasności</button>
+</article>
+<article>
   <details id="androidHelp"><summary>📱 Widżet na telefonie z Home Assistant</summary>
     <p>W Home Assistant dodaj integrację <b>Generic Camera</b>. Jako
     <b>Still Image URL</b> ustaw poniższy adres (wstaw lokalny IP Raspberry Pi).
@@ -1000,7 +1029,7 @@ pre{max-height:260px;overflow:auto;font-size:12px}
   </details>
 </article>
 </main><script>
-let lastWide='',working=false,editing=false;
+let lastWide='',working=false,editing=false,brightnessInitialized=false,ldrFresh=false;
 const byId=id=>document.getElementById(id);
 function applyMode(){
   byId('focusrow').hidden=byId('fit').value!=='cover';
@@ -1025,6 +1054,30 @@ async function refresh(){
     byId('ptzstatus').textContent=s.ptz_running?'Ruch + oczekiwanie na nowy obraz':
       (s.last_ptz_error||'Kierunki: ↑ ↓ ← →');
     byId('ptzsettings').textContent='Impuls PTZ: '+s.ptz_pulse_ms+' ms, prędkość '+s.ptz_speed;
+    const br=s.brightness||{};
+    ldrFresh=Number.isInteger(br.raw)&&typeof br.age_seconds==='number'&&br.age_seconds<35;
+    byId('ldrreadout').textContent=ldrFresh?
+      'Odczyt LDR: '+br.raw+' / 4095 · jasność LCD: '+br.actual_percent+'% · '+Math.round(br.age_seconds)+' s temu':
+      'Brak aktualnego odczytu LDR. Wgraj firmware CYD 0.2.7 i sprawdź połączenie Wi-Fi.';
+    if(!brightnessInitialized){
+      if(br.night)byId('nightPercent').value=br.night.percent;
+      if(br.day)byId('dayPercent').value=br.day.percent;
+      brightnessInitialized=true;showBrightnessSliders();
+    }
+    byId('nightSaved').textContent=br.night?
+      'Zapisany pomiar: '+br.night.raw+' / 4095, jasność '+br.night.percent+'%':'Nie skalibrowano';
+    byId('daySaved').textContent=br.day?
+      'Zapisany pomiar: '+br.day.raw+' / 4095, jasność '+br.day.percent+'%':'Nie skalibrowano';
+    for(const anchor of ['night','day']){
+      byId(anchor+'Save').disabled=!ldrFresh||working;
+      byId(anchor+'Test').disabled=!ldrFresh||working;
+    }
+    byId('brightnessReset').disabled=working;
+    if(!working&&byId('brightnessInfo').dataset.action!=='active')
+      byId('brightnessInfo').textContent=br.preview_percent?
+        'Trwa podgląd jasności '+br.preview_percent+'% (maksymalnie 30 s).':
+        br.calibrated?'AUTO: aktywna interpolacja między punktami.':
+        'AUTO nieaktywne: zapisz Noc i Dzień w różnych warunkach światła.';
     byId('captureInfo').textContent=s.source_resolution?
       'Źródło: '+s.source_resolution:'';
     byId('error').textContent=s.last_error||s.discovery_error||'';
@@ -1088,6 +1141,36 @@ async function saveFraming(){
     byId('fitstatus').textContent=result.message;
   }catch(e){byId('fitstatus').textContent='Nie zapisano: '+e.message;}
   finally{editing=false;working=false;await refresh();}
+}
+function showBrightnessSliders(){
+  for(const anchor of ['night','day'])
+    byId(anchor+'Value').textContent=byId(anchor+'Percent').value+'%';
+}
+for(const anchor of ['night','day']){
+  byId(anchor+'Percent').addEventListener('input',showBrightnessSliders);
+  byId(anchor+'Test').addEventListener('click',()=>brightnessAction(
+    'brightness-preview',{percent:Number(byId(anchor+'Percent').value)}));
+  byId(anchor+'Save').addEventListener('click',()=>brightnessAction(
+    'brightness-calibrate',{anchor,percent:Number(byId(anchor+'Percent').value)}));
+}
+byId('brightnessReset').addEventListener('click',()=>{
+  if(confirm('Usunąć oba punkty jasności? LCD powróci do 100%.'))
+    brightnessAction('brightness-reset');
+});
+async function brightnessAction(path,payload){
+  if(working)return;
+  working=true;
+  byId('brightnessInfo').dataset.action='active';
+  try{
+    const result=await post(path,payload);
+    byId('brightnessInfo').textContent=result.message;
+  }catch(e){
+    byId('brightnessInfo').textContent='Błąd kalibracji: '+e.message;
+  }finally{
+    working=false;
+    await refresh();
+    setTimeout(()=>{byId('brightnessInfo').dataset.action='';},12000);
+  }
 }
 byId('fit').addEventListener('change',()=>{applyMode();saveFraming();});
 byId('focus').addEventListener('input',applyMode);
