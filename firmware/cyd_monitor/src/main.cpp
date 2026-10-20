@@ -450,7 +450,7 @@ void checkTouch(){
 bool brightnessAnchorsValid() {
   return lightNight.raw>=0&&lightNight.raw<=4095&&
       lightDay.raw>=0&&lightDay.raw<=4095&&
-      abs(lightDay.raw-lightNight.raw)>=120 &&
+      abs(lightDay.raw-lightNight.raw)>=25 &&
       lightNight.percent>=5&&lightNight.percent<=100&&
       lightDay.percent>=5&&lightDay.percent<=100;
 }
@@ -525,7 +525,7 @@ void getBrightnessConfig(){
       const int nPercent=valid?night["percent"].as<int>():100;
       const int dPercent=valid?day["percent"].as<int>():100;
       const bool newValid=valid&&nRaw>=0&&nRaw<=4095&&dRaw>=0&&dRaw<=4095&&
-          abs(nRaw-dRaw)>=120&&nPercent>=5&&nPercent<=100&&
+          abs(nRaw-dRaw)>=25&&nPercent>=5&&nPercent<=100&&
           dPercent>=5&&dPercent<=100;
       if(newValid){
         if(!brightnessCalibrated||lightNight.raw!=nRaw||lightDay.raw!=dRaw||

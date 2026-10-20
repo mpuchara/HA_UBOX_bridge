@@ -4,7 +4,7 @@ No clock/sunrise dependency. Sensor scale/polarity may differ by CYD PCB.
 from __future__ import annotations
 from dataclasses import dataclass
 
-SAMPLE_MIN_SPAN = 120
+SAMPLE_MIN_SPAN = 25
 PERCENT_MIN = 5
 PERCENT_MAX = 100
 
